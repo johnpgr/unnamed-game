@@ -1,5 +1,7 @@
 #pragma once
 
+#include "platform/platform.h"
+
 // 1 Terabyte of virtual address space reservation.
 // Costs nothing in physical RAM until committed.
 #define ARENA_RESERVE_SIZE (1 * TB)

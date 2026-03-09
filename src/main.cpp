@@ -1,12 +1,28 @@
-#include "defines.h"
+#include "base/defines.h"
 
 #if OS_WINDOWS
-#include "memory_win32.cpp"
+#include "platform/platform_win32.cpp"
+#elif OS_LINUX
+#include "platform/platform_linux.cpp"
+#elif OS_MAC
+#include "platform/platform_macos.cpp"
 #else
-#include "memory_posix.cpp"
 #endif
 
+#if OS_WINDOWS
+int WINAPI WinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    LPSTR lpCmdLine,
+    int nShowCmd
+) {
+    (void)hInstance;
+    (void)hPrevInstance;
+    (void)lpCmdLine;
+    (void)nShowCmd;
+#else
 int main(int argc, char* argv[]) {
+#endif
     (void)argc;
     (void)argv;
 

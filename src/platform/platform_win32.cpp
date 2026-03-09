@@ -1,4 +1,3 @@
-#include "defines.h"
 #define WIN32_LEAN_AND_MEAN
 #include <stdlib.h>
 #include <windows.h>
@@ -10,7 +9,6 @@ static void os_memory_fail(const char* operation) {
 }
 
 void* os_memory_reserve(u64 size) {
-    // PAGE_NOACCESS ensures no RAM is used and any access crashes (good for debugging)
     void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_NOACCESS);
     if (ptr == NULL) {
         os_memory_fail("VirtualAlloc reserve");
@@ -44,7 +42,6 @@ void os_memory_release(void* ptr, u64 size) {
     (void)size;
     if (ptr == NULL) return;
 
-    // Size must be 0 when using MEM_RELEASE
     if (VirtualFree(ptr, 0, MEM_RELEASE) == 0) {
         os_memory_fail("VirtualFree release");
     }

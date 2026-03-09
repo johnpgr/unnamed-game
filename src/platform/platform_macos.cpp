@@ -1,5 +1,3 @@
-#include "defines.h"
-
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -12,8 +10,7 @@ static void os_memory_fail(const char* operation) {
 }
 
 void* os_memory_reserve(u64 size) {
-    // PROT_NONE ensures the address range is reserved but inaccessible.
-    void* ptr = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* ptr = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (ptr == MAP_FAILED) {
         os_memory_fail("mmap reserve");
     }
@@ -32,8 +29,6 @@ u64 os_memory_page_size() {
 void os_memory_commit(void* ptr, u64 size) {
     if (size == 0) return;
 
-    // Making it READ|WRITE tells the OS to back it with physical pages when
-    // accessed.
     if (mprotect(ptr, size, PROT_READ | PROT_WRITE) != 0) {
         os_memory_fail("mprotect commit");
     }
@@ -42,8 +37,6 @@ void os_memory_commit(void* ptr, u64 size) {
 void os_memory_decommit(void* ptr, u64 size) {
     if (size == 0) return;
 
-    // PROT_NONE tells the OS the pages are no longer needed.
-    // MADV_DONTNEED explicitly tells the kernel to reclaim the physical RAM.
     if (mprotect(ptr, size, PROT_NONE) != 0) {
         os_memory_fail("mprotect decommit");
     }

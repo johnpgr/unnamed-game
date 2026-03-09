@@ -12,11 +12,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "typedef.h"
-#include "log.h"
-#include "core.h"
+#include "base/typedef.h"
+#include "base/log.h"
+#include "base/core.h"
 
-#include "memory.h"
-#include "arena.h"
-#include "array.h"
-#include "string8.h"
+#include "base/arena.h"
+#include "base/array.h"
+#include "base/string.h"
