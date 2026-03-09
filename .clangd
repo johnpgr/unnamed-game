@@ -1,0 +1,27 @@
+CompileFlags:
+  Add:
+    - -I/usr/local/include
+    - -I/opt/homebrew/include
+    - -include
+    - defines.h
+
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add:
+      - bugprone-*
+      - cert-*
+      - clang-analyzer-*
+      - misc-*
+      - performance-*
+      - portability-*
+      - readability-*
+    Remove:
+      - readability-magic-numbers
+      - readability-function-cognitive-complexity
+      - readability-identifier-length
+      - readability-braces-around-statements
+      - readability-uppercase-literal-suffix
+      - bugprone-suspicious-include
+      - misc-non-private-member-variables-in-classes
+      - bugprone-easily-swappable-parameters

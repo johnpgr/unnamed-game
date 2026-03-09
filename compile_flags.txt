@@ -1,0 +1,49 @@
+-std=c++11
+
+# Includes
+-Ilib
+-Isrc
+
+# Warnings
+-Wall
+-Wextra
+-Werror
+-Wshadow
+-Wformat=2
+-Wformat-security
+-Wformat-truncation
+-Wformat-overflow
+-Wnull-dereference
+-Wstrict-prototypes
+-Wmissing-prototypes
+-Wmissing-declarations
+-Wdouble-promotion
+-Wconversion
+-Wsign-conversion
+-Wcast-qual
+-Wcast-align
+-Wpointer-arith
+-Wwrite-strings
+-Wvla
+-Walloca
+-Wbad-function-cast
+-Wstrict-overflow=4
+-Wundef
+-Wunused
+-Wimplicit-fallthrough
+-Warray-bounds
+-Wstack-protector
+-Wno-gnu-alignof-expression
+
+# Hardening
+-fstack-protector-strong
+-D_FORTIFY_SOURCE=3
+
+# Sanitizers (UB-class; ASan/TSan need build-system linkage)
+-fsanitize=undefined
+-fsanitize=bounds
+-fsanitize=alignment
+-fsanitize=null
+-fsanitize=signed-integer-overflow
+-fsanitize=pointer-overflow
+-fsanitize=shift

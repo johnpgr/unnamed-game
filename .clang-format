@@ -1,0 +1,16 @@
+BasedOnStyle: LLVM
+SortIncludes: Never
+IndentWidth: 4
+ColumnLimit: 80
+DerivePointerAlignment: false
+PointerAlignment: Left
+IndentCaseLabels: true
+BinPackArguments: false
+BinPackParameters: false
+AlignAfterOpenBracket: BlockIndent
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AlwaysBreakAfterReturnType: None
+AllowShortFunctionsOnASingleLine: None
+PenaltyReturnTypeOnItsOwnLine: 1000
