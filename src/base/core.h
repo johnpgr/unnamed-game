@@ -66,7 +66,7 @@
 #define ASSUME(expr) ((void)0)
 #endif
 
-inline void debug_break() {
+inline void debugBreak() {
 #if COMPILER_MSVC
     __debugbreak();
 #elif COMPILER_CLANG
@@ -79,35 +79,22 @@ inline void debug_break() {
 }
 
 #ifndef NDEBUG
-
-#define assert(expr)                                                           \
+#define assert(expr, msg)                                                      \
     do {                                                                       \
         if (!(expr)) {                                                         \
-            log_fatal("assertion failed: %s", #expr);                          \
-            debug_break();                                                     \
+            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                \
+            debugBreak();                                                      \
         }                                                                      \
     } while (0)
-
-#define assert_msg(expr, msg)                                                  \
-    do {                                                                       \
-        if (!(expr)) {                                                         \
-            log_fatal("assertion failed: %s - %s", #expr, msg);                \
-            debug_break();                                                     \
-        }                                                                      \
-    } while (0)
-
 #else
-
-#define assert(expr) ((void)sizeof((expr) ? true : false))
-#define assert_msg(expr, msg) ((void)sizeof((expr) ? true : false))
-
+#define assert(expr, msg) ((void)sizeof((expr) ? true : false))
 #endif
 
-inline bool is_pow2(u64 value) {
+inline bool isPow2(u64 value) {
     return value != 0 && (value & (value - 1)) == 0;
 }
 
-inline bool u64_add_overflow(u64 a, u64 b, u64* out) {
+inline bool u64AddOverflow(u64 a, u64 b, u64* out) {
 #if COMPILER_CLANG || COMPILER_GCC
     return __builtin_add_overflow(a, b, out);
 #else
@@ -121,7 +108,7 @@ inline bool u64_add_overflow(u64 a, u64 b, u64* out) {
 #endif
 }
 
-inline bool u64_mul_overflow(u64 a, u64 b, u64* out) {
+inline bool u64MulOverflow(u64 a, u64 b, u64* out) {
 #if COMPILER_CLANG || COMPILER_GCC
     return __builtin_mul_overflow(a, b, out);
 #else
@@ -135,14 +122,14 @@ inline bool u64_mul_overflow(u64 a, u64 b, u64* out) {
 #endif
 }
 
-inline bool u64_align_up_pow2(u64 value, u64 alignment, u64* out) {
-    if (!is_pow2(alignment)) {
+inline bool u64AlignUpPow2(u64 value, u64 alignment, u64* out) {
+    if (!isPow2(alignment)) {
         *out = 0;
         return true;
     }
 
     u64 sum = 0;
-    if (u64_add_overflow(value, alignment - 1, &sum)) {
+    if (u64AddOverflow(value, alignment - 1, &sum)) {
         *out = 0;
         return true;
     }

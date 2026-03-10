@@ -114,11 +114,11 @@ struct Vec2 {
         return !(*this == v);
     }
 
-    f32 length_squared() const {
+    f32 lengthSquared() const {
         return dot(*this);
     }
     f32 length() const {
-        return sqrtf(length_squared());
+        return sqrtf(lengthSquared());
     }
     f32 dot(const Vec2& v) const {
         return x * v.x + y * v.y;
@@ -219,11 +219,11 @@ struct IVec2 {
         return !(*this == v);
     }
 
-    i32 length_squared() const {
+    i32 lengthSquared() const {
         return dot(*this);
     }
     f32 length() const {
-        return sqrtf((f32)length_squared());
+        return sqrtf((f32)lengthSquared());
     }
     i32 dot(const IVec2& v) const {
         return x * v.x + y * v.y;
@@ -330,11 +330,11 @@ struct Vec3 {
         return !(*this == v);
     }
 
-    f32 length_squared() const {
+    f32 lengthSquared() const {
         return dot(*this);
     }
     f32 length() const {
-        return sqrtf(length_squared());
+        return sqrtf(lengthSquared());
     }
     f32 dot(const Vec3& v) const {
         return x * v.x + y * v.y + z * v.z;
@@ -457,11 +457,11 @@ struct Vec4 {
         return !(*this == v);
     }
 
-    f32 length_squared() const {
+    f32 lengthSquared() const {
         return dot(*this);
     }
     f32 length() const {
-        return sqrtf(length_squared());
+        return sqrtf(lengthSquared());
     }
     f32 dot(const Vec4& v) const {
         return x * v.x + y * v.y + z * v.z + w * v.w;
@@ -491,7 +491,7 @@ struct Mat2x2 {
         identity();
     }
     Mat2x2(f32 diagonal) {
-        set_zero();
+        setZero();
         columns[0].x = diagonal;
         columns[1].y = diagonal;
     }
@@ -576,12 +576,12 @@ struct Mat2x2 {
         return *this;
     }
 
-    void set_zero() {
+    void setZero() {
         columns[0] = Vec2(0.0f);
         columns[1] = Vec2(0.0f);
     }
     void identity() {
-        set_zero();
+        setZero();
         columns[0].x = 1.0f;
         columns[1].y = 1.0f;
     }
@@ -623,7 +623,7 @@ struct Mat3x3 {
         identity();
     }
     Mat3x3(f32 diagonal) {
-        set_zero();
+        setZero();
         columns[0].x = diagonal;
         columns[1].y = diagonal;
         columns[2].z = diagonal;
@@ -718,13 +718,13 @@ struct Mat3x3 {
         return *this;
     }
 
-    void set_zero() {
+    void setZero() {
         columns[0] = Vec3(0.0f);
         columns[1] = Vec3(0.0f);
         columns[2] = Vec3(0.0f);
     }
     void identity() {
-        set_zero();
+        setZero();
         columns[0].x = 1.0f;
         columns[1].y = 1.0f;
         columns[2].z = 1.0f;
@@ -778,7 +778,7 @@ struct Mat4x4 {
         identity();
     }
     Mat4x4(f32 diagonal) {
-        set_zero();
+        setZero();
         columns[0].x = diagonal;
         columns[1].y = diagonal;
         columns[2].z = diagonal;
@@ -884,14 +884,14 @@ struct Mat4x4 {
         return *this;
     }
 
-    void set_zero() {
+    void setZero() {
         columns[0] = Vec4(0.0f);
         columns[1] = Vec4(0.0f);
         columns[2] = Vec4(0.0f);
         columns[3] = Vec4(0.0f);
     }
     void identity() {
-        set_zero();
+        setZero();
         columns[0].x = 1.0f;
         columns[1].y = 1.0f;
         columns[2].z = 1.0f;
@@ -955,11 +955,11 @@ struct Mat4x4 {
         *this = inversed();
     }
 
-    Vec3 transform_point(const Vec3& p) const {
+    Vec3 transformPoint(const Vec3& p) const {
         Vec4 result = (*this) * Vec4(p, 1.0f);
         return Vec3(result.x, result.y, result.z);
     }
-    Vec3 transform_vector(const Vec3& v) const {
+    Vec3 transformVector(const Vec3& v) const {
         Vec4 result = (*this) * Vec4(v, 0.0f);
         return Vec3(result.x, result.y, result.z);
     }
@@ -971,7 +971,7 @@ struct Mat4x4 {
         result.columns[3].z = translation.z;
         return result;
     }
-    static Mat4x4 inverse_translate(const Mat4x4& matrix) {
+    static Mat4x4 inverseTranslate(const Mat4x4& matrix) {
         Mat4x4 result = matrix;
         result.columns[3].x = -result.columns[3].x;
         result.columns[3].y = -result.columns[3].y;
@@ -986,7 +986,7 @@ struct Mat4x4 {
         result.columns[2].z = scale.z;
         return result;
     }
-    static Mat4x4 inverse_scale(const Mat4x4& matrix) {
+    static Mat4x4 inverseScale(const Mat4x4& matrix) {
         Mat4x4 result = matrix;
         result.columns[0].x = 1.0f / result.columns[0].x;
         result.columns[1].y = 1.0f / result.columns[1].y;
@@ -994,7 +994,7 @@ struct Mat4x4 {
         return result;
     }
 
-    static Mat4x4 rotate_x(f32 angle) {
+    static Mat4x4 rotateX(f32 angle) {
         Mat4x4 result;
         f32 c = cosf(angle);
         f32 s = sinf(angle);
@@ -1004,7 +1004,7 @@ struct Mat4x4 {
         result.columns[2].z = c;
         return result;
     }
-    static Mat4x4 rotate_y(f32 angle) {
+    static Mat4x4 rotateY(f32 angle) {
         Mat4x4 result;
         f32 c = cosf(angle);
         f32 s = sinf(angle);
@@ -1014,7 +1014,7 @@ struct Mat4x4 {
         result.columns[2].z = c;
         return result;
     }
-    static Mat4x4 rotate_z(f32 angle) {
+    static Mat4x4 rotateZ(f32 angle) {
         Mat4x4 result;
         f32 c = cosf(angle);
         f32 s = sinf(angle);
@@ -1024,7 +1024,7 @@ struct Mat4x4 {
         result.columns[1].y = c;
         return result;
     }
-    static Mat4x4 rotate_rh(f32 angle, Vec3 axis) {
+    static Mat4x4 rotateRH(f32 angle, Vec3 axis) {
         Mat4x4 result;
         axis = axis.normalized();
         f32 sin_theta = sinf(angle);
@@ -1042,14 +1042,14 @@ struct Mat4x4 {
         result(2, 2) = axis.z * axis.z * one_minus_cos + cos_theta;
         return result;
     }
-    static Mat4x4 rotate_lh(f32 angle, const Vec3& axis) {
-        return rotate_rh(-angle, axis);
+    static Mat4x4 rotateLH(f32 angle, const Vec3& axis) {
+        return rotateRH(-angle, axis);
     }
-    static Mat4x4 inverse_rotate(const Mat4x4& matrix) {
+    static Mat4x4 inverseRotate(const Mat4x4& matrix) {
         return matrix.transposed();
     }
 
-    static Mat4x4 orthographic_rh_no(
+    static Mat4x4 orthographicRHNO(
         f32 left,
         f32 right,
         f32 bottom,
@@ -1067,7 +1067,7 @@ struct Mat4x4 {
         result(2, 3) = (near_z + far_z) / (near_z - far_z);
         return result;
     }
-    static Mat4x4 orthographic_rh_zo(
+    static Mat4x4 orthographicRHZO(
         f32 left,
         f32 right,
         f32 bottom,
@@ -1085,7 +1085,7 @@ struct Mat4x4 {
         result(2, 3) = near_z / (near_z - far_z);
         return result;
     }
-    static Mat4x4 orthographic_lh_no(
+    static Mat4x4 orthographicLHNO(
         f32 left,
         f32 right,
         f32 bottom,
@@ -1094,11 +1094,11 @@ struct Mat4x4 {
         f32 far_z
     ) {
         Mat4x4 result =
-            orthographic_rh_no(left, right, bottom, top, near_z, far_z);
+            orthographicRHNO(left, right, bottom, top, near_z, far_z);
         result(2, 2) = -result(2, 2);
         return result;
     }
-    static Mat4x4 orthographic_lh_zo(
+    static Mat4x4 orthographicLHZO(
         f32 left,
         f32 right,
         f32 bottom,
@@ -1107,11 +1107,11 @@ struct Mat4x4 {
         f32 far_z
     ) {
         Mat4x4 result =
-            orthographic_rh_zo(left, right, bottom, top, near_z, far_z);
+            orthographicRHZO(left, right, bottom, top, near_z, far_z);
         result(2, 2) = -result(2, 2);
         return result;
     }
-    static Mat4x4 inverse_orthographic(const Mat4x4& ortho) {
+    static Mat4x4 inverseOrthographic(const Mat4x4& ortho) {
         Mat4x4 result(0.0f);
         result(0, 0) = 1.0f / ortho(0, 0);
         result(1, 1) = 1.0f / ortho(1, 1);
@@ -1122,16 +1122,16 @@ struct Mat4x4 {
         result(2, 3) = -ortho(2, 3) * result(2, 2);
         return result;
     }
-    static Mat4x4 orthographic_projection(
+    static Mat4x4 orthographicProjection(
         f32 left,
         f32 right,
         f32 top,
         f32 bottom
     ) {
-        return orthographic_rh_zo(left, right, bottom, top, 0.0f, 1.0f);
+        return orthographicRHZO(left, right, bottom, top, 0.0f, 1.0f);
     }
 
-    static Mat4x4 perspective_rh_no(
+    static Mat4x4 perspectiveRHNO(
         f32 fov,
         f32 aspect_ratio,
         f32 near_z,
@@ -1146,7 +1146,7 @@ struct Mat4x4 {
         result(3, 2) = -1.0f;
         return result;
     }
-    static Mat4x4 perspective_rh_zo(
+    static Mat4x4 perspectiveRHZO(
         f32 fov,
         f32 aspect_ratio,
         f32 near_z,
@@ -1161,29 +1161,29 @@ struct Mat4x4 {
         result(3, 2) = -1.0f;
         return result;
     }
-    static Mat4x4 perspective_lh_no(
+    static Mat4x4 perspectiveLHNO(
         f32 fov,
         f32 aspect_ratio,
         f32 near_z,
         f32 far_z
     ) {
-        Mat4x4 result = perspective_rh_no(fov, aspect_ratio, near_z, far_z);
+        Mat4x4 result = perspectiveRHNO(fov, aspect_ratio, near_z, far_z);
         result(2, 2) = -result(2, 2);
         result(3, 2) = -result(3, 2);
         return result;
     }
-    static Mat4x4 perspective_lh_zo(
+    static Mat4x4 perspectiveLHZO(
         f32 fov,
         f32 aspect_ratio,
         f32 near_z,
         f32 far_z
     ) {
-        Mat4x4 result = perspective_rh_zo(fov, aspect_ratio, near_z, far_z);
+        Mat4x4 result = perspectiveRHZO(fov, aspect_ratio, near_z, far_z);
         result(2, 2) = -result(2, 2);
         result(3, 2) = -result(3, 2);
         return result;
     }
-    static Mat4x4 inverse_perspective_rh(const Mat4x4& perspective) {
+    static Mat4x4 inversePerspectiveRH(const Mat4x4& perspective) {
         Mat4x4 result(0.0f);
         result(0, 0) = 1.0f / perspective(0, 0);
         result(1, 1) = 1.0f / perspective(1, 1);
@@ -1192,7 +1192,7 @@ struct Mat4x4 {
         result(3, 3) = perspective(2, 2) * result(2, 3);
         return result;
     }
-    static Mat4x4 inverse_perspective_lh(const Mat4x4& perspective) {
+    static Mat4x4 inversePerspectiveLH(const Mat4x4& perspective) {
         Mat4x4 result(0.0f);
         result(0, 0) = 1.0f / perspective(0, 0);
         result(1, 1) = 1.0f / perspective(1, 1);
@@ -1202,10 +1202,10 @@ struct Mat4x4 {
         return result;
     }
     static Mat4x4 perspective(f32 fov, f32 aspect, f32 z_near, f32 z_far) {
-        return perspective_rh_no(fov, aspect, z_near, z_far);
+        return perspectiveRHNO(fov, aspect, z_near, z_far);
     }
 
-    static Mat4x4 look_at_rh(
+    static Mat4x4 lookAtRH(
         const Vec3& eye,
         const Vec3& center,
         const Vec3& up
@@ -1221,7 +1221,7 @@ struct Mat4x4 {
         result.columns[3] = Vec4(-s.dot(eye), -u.dot(eye), f.dot(eye), 1.0f);
         return result;
     }
-    static Mat4x4 look_at_lh(
+    static Mat4x4 lookAtLH(
         const Vec3& eye,
         const Vec3& center,
         const Vec3& up
@@ -1237,7 +1237,7 @@ struct Mat4x4 {
         result.columns[3] = Vec4(-s.dot(eye), -u.dot(eye), f.dot(eye), 1.0f);
         return result;
     }
-    static Mat4x4 inverse_look_at(const Mat4x4& matrix) {
+    static Mat4x4 inverseLookAt(const Mat4x4& matrix) {
         Mat3x3 rotation(0.0f);
         rotation.columns[0] = matrix.columns[0].xyz();
         rotation.columns[1] = matrix.columns[1].xyz();
@@ -1258,8 +1258,8 @@ struct Mat4x4 {
         result(3, 3) = 1.0f;
         return result;
     }
-    static Mat4x4 look_at(const Vec3& eye, const Vec3& center, const Vec3& up) {
-        return look_at_rh(eye, center, up);
+    static Mat4x4 lookAt(const Vec3& eye, const Vec3& center, const Vec3& up) {
+        return lookAtRH(eye, center, up);
     }
 };
 
@@ -1353,11 +1353,11 @@ struct Quat {
     f32 dot(const Quat& q) const {
         return x * q.x + y * q.y + z * q.z + w * q.w;
     }
-    f32 length_squared() const {
+    f32 lengthSquared() const {
         return dot(*this);
     }
     f32 length() const {
-        return sqrtf(length_squared());
+        return sqrtf(lengthSquared());
     }
     Quat normalized() const {
         f32 len = length();
@@ -1367,12 +1367,12 @@ struct Quat {
         *this = normalized();
     }
     Quat inversed() const {
-        return Quat(-x, -y, -z, w) / length_squared();
+        return Quat(-x, -y, -z, w) / lengthSquared();
     }
     void invert() {
         *this = inversed();
     }
-    Vec4 as_vec4() const {
+    Vec4 asVec4() const {
         return Vec4(x, y, z, w);
     }
 
@@ -1395,7 +1395,7 @@ struct Quat {
         return ((*this) * left_mix + other * right_mix).normalized();
     }
 
-    Mat4x4 to_mat4() const {
+    Mat4x4 toMat4() const {
         Quat q = normalized();
 
         f32 xx = q.x * q.x;
@@ -1428,7 +1428,7 @@ struct Quat {
         return result;
     }
 
-    static Quat from_axis_angle_rh(Vec3 axis, f32 angle) {
+    static Quat fromAxisAngleRH(Vec3 axis, f32 angle) {
         axis = axis.normalized();
         f32 half_angle = angle * 0.5f;
         f32 sin_half = sinf(half_angle);
@@ -1440,10 +1440,10 @@ struct Quat {
             cos_half
         );
     }
-    static Quat from_axis_angle_lh(const Vec3& axis, f32 angle) {
-        return from_axis_angle_rh(axis, -angle);
+    static Quat fromAxisAngleLH(const Vec3& axis, f32 angle) {
+        return fromAxisAngleRH(axis, -angle);
     }
-    static Quat from_mat4_rh(const Mat4x4& m) {
+    static Quat fromMat4RH(const Mat4x4& m) {
         f32 t;
         Quat q;
 
@@ -1487,7 +1487,7 @@ struct Quat {
 
         return q * (0.5f / sqrtf(t));
     }
-    static Quat from_mat4_lh(const Mat4x4& m) {
+    static Quat fromMat4LH(const Mat4x4& m) {
         f32 t;
         Quat q;
 

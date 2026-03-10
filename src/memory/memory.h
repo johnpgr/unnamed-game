@@ -1,7 +1,7 @@
 #pragma once
 
-void* platform_memory_reserve(u64 size);
-u64 platform_memory_page_size(void);
-void platform_memory_commit(void* ptr, u64 size);
-void platform_memory_decommit(void* ptr, u64 size);
-void platform_memory_release(void* ptr, u64 size);
+void* pmReserveMemory(u64 size);
+u64 pmGetPageSize(void);
+void pmCommitMemory(void* ptr, u64 size);
+void pmDecommitMemory(void* ptr, u64 size);
+void pmReleaseMemory(void* ptr, u64 size);

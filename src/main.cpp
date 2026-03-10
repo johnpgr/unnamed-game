@@ -18,24 +18,24 @@
 typedef int (*GameTestSymbolFn)(void);
 
 MAIN {
-    (void)renderer_vulkan_draw_frame;
+    (void)rvkDrawFrame;
 
     Arena global_arena = Arena::make();
-    platform_window_init("Unnammed game", WIDTH, HEIGHT);
-    platform_window_set_resizable(true);
+    pwCreateWindow("Unnammed game", WIDTH, HEIGHT);
+    pwSetWindowResizable(true);
 
-    if (!renderer_vulkan_init(&global_arena)) {
+    if (!rvkCreateRenderer(&global_arena)) {
         global_arena.release();
         return -1;
     };
 
-    platform_window_show();
+    pwShowWindow();
 
-    while (!platform_window_should_close()) {
-        platform_window_poll_events();
+    while (!pwShouldCloseWindow()) {
+        pwPollEvents();
     }
 
-    renderer_vulkan_cleanup();
+    rvkDestroyRenderer();
     global_arena.release();
     return 0;
 }
