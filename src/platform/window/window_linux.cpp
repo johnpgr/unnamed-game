@@ -94,7 +94,7 @@ void pwDestroyWindow(void) {
     linux_state = {};
 }
 
-bool pwShouldCloseWindow(void) {
+bool pwShouldWindowClose(void) {
     return linux_state.should_close;
 }
 

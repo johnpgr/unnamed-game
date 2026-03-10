@@ -80,7 +80,7 @@ void pwDestroyWindow(void) {
     win32_state = {};
 }
 
-bool pwShouldCloseWindow(void) {
+bool pwShouldWindowClose(void) {
     return win32_state.should_close;
 }
 

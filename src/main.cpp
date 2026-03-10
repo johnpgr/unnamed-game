@@ -31,7 +31,7 @@ MAIN {
 
     pwShowWindow();
 
-    while (!pwShouldCloseWindow()) {
+    while (!pwShouldWindowClose()) {
         pwPollEvents();
     }
 

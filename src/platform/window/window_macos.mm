@@ -56,7 +56,7 @@ void pwDestroyWindow(void) {
     }
 }
 
-bool pwShouldCloseWindow(void) {
+bool pwShouldWindowClose(void) {
     return mac_state.should_close;
 }
 
@@ -125,7 +125,7 @@ void pwSetWindowResizable(bool resizable) {
         if (resizable) {
             style |= NSWindowStyleMaskResizable;
         } else {
-            style &= ~NSWindowStyleMaskResizable;
+            style &= (u32)~NSWindowStyleMaskResizable;
         }
         [mac_state.window setStyleMask:style];
     }

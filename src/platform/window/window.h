@@ -7,7 +7,7 @@ inline void pwCreateWindow(const char* title, int width, int height) {
 }
 
 void pwDestroyWindow(void);
-bool pwShouldCloseWindow(void);
+bool pwShouldWindowClose(void);
 void pwPollEvents(void);
 void pwSetWindowTitle(String title);
 
