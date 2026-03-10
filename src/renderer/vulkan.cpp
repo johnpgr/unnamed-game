@@ -24,8 +24,26 @@ internal bool renderer_vulkan_find_graphics_queue_family(
     u32* out_queue_family_index
 );
 
+internal u32 renderer_vulkan_target_api_version(void);
+
 internal u32
 renderer_vulkan_device_score(Arena* arena, VkPhysicalDevice physical_device);
+
+internal u32 renderer_vulkan_target_api_version(void) {
+    u32 api_version = VK_API_VERSION_1_0;
+    PFN_vkEnumerateInstanceVersion enumerate_instance_version =
+        (PFN_vkEnumerateInstanceVersion)vkGetInstanceProcAddr(
+            VK_NULL_HANDLE,
+            "vkEnumerateInstanceVersion"
+        );
+
+    if (enumerate_instance_version != nullptr &&
+        enumerate_instance_version(&api_version) == VK_SUCCESS) {
+        return api_version;
+    }
+
+    return VK_API_VERSION_1_0;
+}
 
 internal bool renderer_vulkan_is_ext_available(
     Arena* arena,
@@ -574,7 +592,7 @@ internal bool renderer_vulkan_init(Arena* arena) {
     info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     info.pEngineName = "No Engine";
     info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    info.apiVersion = VK_API_VERSION_1_3;
+    info.apiVersion = renderer_vulkan_target_api_version();
     vk_state.app_info = info;
 
     Array<const char*> extensions = renderer_vulkan_instance_extensions(arena);
