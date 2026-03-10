@@ -2,7 +2,7 @@
 
 #include <windows.h>
 
-static void os_memory_fail(const char* operation) {
+internal void platform_memory_fail(const char* operation) {
     DWORD error = GetLastError();
     log_fatal("%s failed with error %lu", operation, (unsigned long)error);
     abort();
@@ -11,7 +11,7 @@ static void os_memory_fail(const char* operation) {
 void* platform_memory_reserve(u64 size) {
     void* ptr = VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_NOACCESS);
     if (ptr == nullptr) {
-        os_memory_fail("VirtualAlloc reserve");
+        platform_memory_fail("VirtualAlloc reserve");
     }
     return ptr;
 }
@@ -29,7 +29,7 @@ void platform_memory_commit(void* ptr, u64 size) {
 
     void* result = VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
     if (result == nullptr) {
-        os_memory_fail("VirtualAlloc commit");
+        platform_memory_fail("VirtualAlloc commit");
     }
 }
 
@@ -39,7 +39,7 @@ void platform_memory_decommit(void* ptr, u64 size) {
     }
 
     if (VirtualFree(ptr, size, MEM_DECOMMIT) == 0) {
-        os_memory_fail("VirtualFree decommit");
+        platform_memory_fail("VirtualFree decommit");
     }
 }
 
@@ -50,7 +50,7 @@ void platform_memory_release(void* ptr, u64 size) {
     }
 
     if (VirtualFree(ptr, 0, MEM_RELEASE) == 0) {
-        os_memory_fail("VirtualFree release");
+        platform_memory_fail("VirtualFree release");
     }
 }
 
