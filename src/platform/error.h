@@ -10,4 +10,6 @@ enum class ErrorCode : u8 {
     FILE_EXISTS = 4
 };
 
+void Fail(const char* message);
+
 }

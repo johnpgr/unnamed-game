@@ -1,9 +1,7 @@
 #if OS_MAC
 
 #pragma push_macro("internal")
-#pragma push_macro("ASSERT")
 #undef internal
-#undef ASSERT
 #include <AppKit/AppKit.h>
 #include <Foundation/Foundation.h>
 #include <QuartzCore/QuartzCore.h>
@@ -15,7 +13,6 @@
 #include <mach-o/dyld.h>
 #include <unistd.h>
 #include <vulkan/vulkan_metal.h>
-#pragma pop_macro("ASSERT")
 #pragma pop_macro("internal")
 
 namespace Platform {
@@ -33,6 +30,16 @@ struct MacPlatformState {
 };
 
 extern MacPlatformState mac_state;
+
+void Fail(const char* message) {
+    int error = errno;
+    if (error != 0) {
+        LOG_FATAL("%s failed: %s", message, strerror(error));
+    } else {
+        LOG_FATAL("%s", message);
+    }
+    abort();
+}
 
 }
 
@@ -58,7 +65,7 @@ extern MacPlatformState mac_state;
 
 namespace Platform {
 
-internal MacPlatformState mac_state = {};
+MacPlatformState mac_state = {};
 internal Arena mac_scratch_arena = {};
 internal bool mac_scratch_initialized = false;
 
@@ -103,11 +110,6 @@ internal bool HasInstanceExtensionMacOS(const char* extension_name) {
     }
 
     return false;
-}
-
-internal void Fail(const char* message) {
-    LOG_FATAL("%s", message);
-    abort();
 }
 
 internal NSString* ToNSStringMacOS(String text) {

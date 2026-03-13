@@ -31,6 +31,16 @@ internal LinuxPlatformState linux_state = {};
 internal Arena linux_scratch_arena = {};
 internal bool linux_scratch_initialized = false;
 
+void Fail(const char* message) {
+    int error = errno;
+    if (error != 0) {
+        LOG_FATAL("%s failed: %s", message, strerror(error));
+    } else {
+        LOG_FATAL("%s", message);
+    }
+    abort();
+}
+
 internal xcb_screen_t* GetDefaultScreenLinux(xcb_connection_t* connection) {
     const xcb_setup_t* setup = xcb_get_setup(connection);
     xcb_screen_iterator_t it = xcb_setup_roots_iterator(setup);

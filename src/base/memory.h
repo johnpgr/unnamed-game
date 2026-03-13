@@ -8,18 +8,9 @@
 #include <unistd.h>
 #endif
 
-namespace Platform {
+#include "platform/error.h"
 
-internal inline void Fail(const char* operation) {
-#if OS_WINDOWS
-    DWORD error = GetLastError();
-    LOG_FATAL("%s failed with error %lu", operation, (unsigned long)error);
-#else
-    int error = errno;
-    LOG_FATAL("%s failed: %s", operation, strerror(error));
-#endif
-    abort();
-}
+namespace Platform {
 
 inline void* ReserveMemory(u64 size) {
 #if OS_WINDOWS

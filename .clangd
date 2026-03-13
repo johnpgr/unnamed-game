@@ -6,12 +6,6 @@ CompileFlags:
     - /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk
 
 ---
-If:
-  PathMatch: src/platform/macos/internal\.h
-CompileFlags:
-  Add:
-    - -x
-    - objective-c++-header
 
 Diagnostics:
   UnusedIncludes: Strict

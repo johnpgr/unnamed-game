@@ -36,7 +36,7 @@ case "$UNAME_S" in
   Darwin)
     GAME_OUTPUT_FILE="$BUILD_DIR/libgame.dylib"
     GAME_LINK_FLAGS="-dynamiclib -fPIC"
-    MAIN_SOURCE_FLAGS="\"$MAIN_SOURCE_FILE\""
+    MAIN_SOURCE_FLAGS="-x objective-c++ \"$MAIN_SOURCE_FILE\""
     MAIN_LINK_FLAGS="-framework AppKit -framework Foundation -framework QuartzCore -ldl"
     ;;
   MINGW*|MSYS*|CYGWIN*)

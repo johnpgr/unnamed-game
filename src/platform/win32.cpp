@@ -24,8 +24,13 @@ internal Win32PlatformState win32_state = {};
 internal Arena win32_scratch_arena = {};
 internal bool win32_scratch_initialized = false;
 
-internal void Fail(const char* message) {
-    LOG_FATAL("%s", message);
+void Fail(const char* message) {
+    DWORD error = GetLastError();
+    if (error != 0) {
+        LOG_FATAL("%s failed with error %lu", message, (unsigned long)error);
+    } else {
+        LOG_FATAL("%s", message);
+    }
     abort();
 }
 
