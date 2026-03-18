@@ -1,18 +1,15 @@
 CompileFlags:
   Add:
-    - -include
-    - base/defines.h
-    - -isysroot
-    - /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk
+    - -I./lib/glm
+    - -I./lib/SDL/include
 
 ---
 
 If:
-  PathMatch: (^|.*/)src/main\\.cpp$
+  PathMatch: .*\.h
 CompileFlags:
   Add:
-    - -x
-    - objective-c++
+    - -xc++
 
 ---
 

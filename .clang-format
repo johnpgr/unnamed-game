@@ -1,7 +1,7 @@
 BasedOnStyle: LLVM
 SortIncludes: Never
 IndentWidth: 4
-ColumnLimit: 120
+ColumnLimit: 100
 DerivePointerAlignment: false
 PointerAlignment: Left
 IndentCaseLabels: true

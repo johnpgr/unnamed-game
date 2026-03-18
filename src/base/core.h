@@ -1,5 +1,10 @@
 #pragma once
 
+#include <cstdlib>
+#include <utility>
+
+#include "base/log.h"
+
 #if defined(__clang__)
 #define COMPILER_CLANG 1
 #else
@@ -37,17 +42,17 @@
 #define OS_LINUX 0
 #endif
 
-#if OS_WINDOWS && defined(NDEBUG)
-#define main int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
-#else
-#define main int main(int, char**)
-#endif
-
 #if OS_WINDOWS
 #define export extern "C" __declspec(dllexport)
 #else
 #define export extern "C"
 #endif
+
+#define BIT(x) (1ULL << (x))
+#define KB 1024ULL
+#define MB (KB * KB)
+#define GB (MB * KB)
+#define TB (GB * KB)
 
 #define IS_TRIVIAL_TYPE(T) (__is_trivial(T) && __is_trivially_copyable(T))
 
@@ -64,7 +69,7 @@
 #define assume(expr) ((void)0)
 #endif
 
-inline void debug_break() {
+inline void DebugBreak() {
 #if COMPILER_MSVC
     __debugbreak();
 #elif COMPILER_CLANG
@@ -85,21 +90,21 @@ template <typename F> struct Defer {
     F f;
 };
 
-template <typename F> Defer<F> make_defer(F f) {
+template <typename F> Defer<F> MakeDefer(F f) {
     return Defer<F>(f);
 };
 
 struct DeferDummy {};
 
 template <typename F> Defer<F> operator+(DeferDummy, F&& f) {
-    return make_defer<F>(std::forward<F>(f));
+    return MakeDefer<F>((F&&)f);
 }
 
-inline bool is_pow2(u64 value) {
+inline bool IsPow2(u64 value) {
     return value != 0 && (value & (value - 1)) == 0;
 }
 
-inline bool u64_add_overflow(u64 a, u64 b, u64* out) {
+inline bool AddU64Overflow(u64 a, u64 b, u64* out) {
 #if COMPILER_CLANG || COMPILER_GCC
     return __builtin_add_overflow(a, b, out);
 #else
@@ -113,7 +118,7 @@ inline bool u64_add_overflow(u64 a, u64 b, u64* out) {
 #endif
 }
 
-inline bool u64_mul_overflow(u64 a, u64 b, u64* out) {
+inline bool MulU64Overflow(u64 a, u64 b, u64* out) {
 #if COMPILER_CLANG || COMPILER_GCC
     return __builtin_mul_overflow(a, b, out);
 #else
@@ -127,14 +132,14 @@ inline bool u64_mul_overflow(u64 a, u64 b, u64* out) {
 #endif
 }
 
-inline bool u64_align_up_pow2(u64 value, u64 alignment, u64* out) {
-    if (!is_pow2(alignment)) {
+inline bool AlignUpPow2U64(u64 value, u64 alignment, u64* out) {
+    if (!IsPow2(alignment)) {
         *out = 0;
         return true;
     }
 
     u64 sum = 0;
-    if (u64_add_overflow(value, alignment - 1, &sum)) {
+    if (AddU64Overflow(value, alignment - 1, &sum)) {
         *out = 0;
         return true;
     }
@@ -148,7 +153,7 @@ inline bool u64_align_up_pow2(u64 value, u64 alignment, u64* out) {
     do {                                                                                                                 \
         if (!(expr)) {                                                                                                   \
             LOG_FATAL("assertion failed: %s - %s", #expr, msg);                                                          \
-            debug_break();                                                                                                \
+            DebugBreak();                                                                                                 \
         }                                                                                                                \
     } while (0)
 #else

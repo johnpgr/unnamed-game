@@ -1,5 +1,11 @@
 #pragma once
 
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
+
+#include "base/core.h"
+
 #if OS_WINDOWS
 #include <windows.h>
 #else
@@ -8,15 +14,33 @@
 #include <unistd.h>
 #endif
 
-#include "platform/error.h"
+inline void FatalSystemCall(const char* operation) {
+    assert(operation != nullptr, "Operation name must not be null!");
 
-namespace platform {
+#if OS_WINDOWS
+    DWORD error = GetLastError();
+    if (error != 0) {
+        LOG_FATAL("%s failed with error %lu", operation, (unsigned long)error);
+    } else {
+        LOG_FATAL("%s failed", operation);
+    }
+#else
+    int error = errno;
+    if (error != 0) {
+        LOG_FATAL("%s failed: %s", operation, strerror(error));
+    } else {
+        LOG_FATAL("%s failed", operation);
+    }
+#endif
 
-inline void* reserve_memory(u64 size) {
+    abort();
+}
+
+inline void* ReserveSystemMemory(u64 size) {
 #if OS_WINDOWS
     void* ptr = VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_NOACCESS);
     if (ptr == nullptr) {
-        fail("VirtualAlloc reserve");
+        FatalSystemCall("VirtualAlloc reserve");
     }
     return ptr;
 #else
@@ -29,13 +53,13 @@ inline void* reserve_memory(u64 size) {
     void* ptr =
         mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | map_anon_flag, -1, 0);
     if (ptr == MAP_FAILED) {
-        fail("mmap reserve");
+        FatalSystemCall("mmap reserve");
     }
     return ptr;
 #endif
 }
 
-inline u64 get_page_size(void) {
+inline u64 GetSystemPageSize(void) {
 #if OS_WINDOWS
     SYSTEM_INFO system_info = {};
     GetSystemInfo(&system_info);
@@ -50,7 +74,7 @@ inline u64 get_page_size(void) {
 #endif
 }
 
-inline void commit_memory(void* ptr, u64 size) {
+inline void CommitSystemMemory(void* ptr, u64 size) {
     if (size == 0) {
         return;
     }
@@ -58,35 +82,35 @@ inline void commit_memory(void* ptr, u64 size) {
 #if OS_WINDOWS
     void* result = VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
     if (result == nullptr) {
-        fail("VirtualAlloc commit");
+        FatalSystemCall("VirtualAlloc commit");
     }
 #else
     if (mprotect(ptr, size, PROT_READ | PROT_WRITE) != 0) {
-        fail("mprotect commit");
+        FatalSystemCall("mprotect commit");
     }
 #endif
 }
 
-inline void decommit_memory(void* ptr, u64 size) {
+inline void DecommitSystemMemory(void* ptr, u64 size) {
     if (size == 0) {
         return;
     }
 
 #if OS_WINDOWS
     if (VirtualFree(ptr, size, MEM_DECOMMIT) == 0) {
-        fail("VirtualFree decommit");
+        FatalSystemCall("VirtualFree decommit");
     }
 #else
     if (mprotect(ptr, size, PROT_NONE) != 0) {
-        fail("mprotect decommit");
+        FatalSystemCall("mprotect decommit");
     }
     if (madvise(ptr, size, MADV_DONTNEED) != 0) {
-        fail("madvise decommit");
+        FatalSystemCall("madvise decommit");
     }
 #endif
 }
 
-inline void release_memory(void* ptr, u64 size) {
+inline void ReleaseSystemMemory(void* ptr, u64 size) {
 #if OS_WINDOWS
     (void)size;
     if (ptr == nullptr) {
@@ -94,7 +118,7 @@ inline void release_memory(void* ptr, u64 size) {
     }
 
     if (VirtualFree(ptr, 0, MEM_RELEASE) == 0) {
-        fail("VirtualFree release");
+        FatalSystemCall("VirtualFree release");
     }
 #else
     if (ptr == nullptr || size == 0) {
@@ -102,9 +126,7 @@ inline void release_memory(void* ptr, u64 size) {
     }
 
     if (munmap(ptr, size) != 0) {
-        fail("munmap release");
+        FatalSystemCall("munmap release");
     }
 #endif
-}
-
 }

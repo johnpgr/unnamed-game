@@ -1,13 +1,14 @@
 -std=c++11
+-Og
+-g3
+-DDEBUG
 
-# Includes
 -Isrc
+-Ilib/glm
+-Ilib/SDL/include
 -I/usr/include
 -I/usr/local/include
--isysroot
-/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk
 
-# Warnings
 -Wall
 -Wextra
 -Werror
@@ -38,11 +39,9 @@
 -Wstack-protector
 -Wno-gnu-alignof-expression
 
-# Hardening
 -fstack-protector-strong
 -D_FORTIFY_SOURCE=3
 
-# Sanitizers (UB-class; ASan/TSan need build-system linkage)
 -fsanitize=undefined
 -fsanitize=bounds
 -fsanitize=alignment
