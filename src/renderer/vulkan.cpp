@@ -88,8 +88,7 @@ static Array<const char*> GetInstanceExtensions(Arena* arena) {
     assume(arena != nullptr);
 
     Uint32 sdl_extension_count = 0;
-    char const* const* sdl_extensions =
-        SDL_Vulkan_GetInstanceExtensions(&sdl_extension_count);
+    char const* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_extension_count);
     if (sdl_extensions == nullptr || sdl_extension_count == 0) {
         Array<const char*> empty_extensions = {};
         return empty_extensions;
@@ -98,6 +97,10 @@ static Array<const char*> GetInstanceExtensions(Arena* arena) {
     ArrayList<const char*> extensions = ArrayListCreate<const char*>(arena);
     for (Uint32 i = 0; i < sdl_extension_count; i++) {
         extensions.push(sdl_extensions[i]);
+    }
+
+    if (HasInstanceExtension(arena, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+        extensions.push(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     }
 
 #ifndef NDEBUG
@@ -169,9 +172,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
     return VK_FALSE;
 }
 
-static void BuildDebugMessengerCreateInfo(
-    VkDebugUtilsMessengerCreateInfoEXT* out_create_info
-) {
+static void BuildDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* out_create_info) {
     assume(out_create_info != nullptr);
 
     *out_create_info = {};
@@ -298,11 +299,11 @@ static u32 ScoreDevice(Arena* arena, VkPhysicalDevice physical_device) {
 
     VkBool32 supports_device_surface = VK_FALSE;
     VkResult surface_support_result = vkGetPhysicalDeviceSurfaceSupportKHR(
-            physical_device,
-            graphics_queue_family_index,
-            vk_state.surface,
-            &supports_device_surface
-        );
+        physical_device,
+        graphics_queue_family_index,
+        vk_state.surface,
+        &supports_device_surface
+    );
     if (surface_support_result != VK_SUCCESS) {
         return 0;
     }
@@ -559,10 +560,7 @@ bool InitVulkan(Arena* arena, SDL_Window* window) {
 
     Array<const char*> extensions = GetInstanceExtensions(arena);
     if (extensions.count == 0 || extensions.items == nullptr) {
-        LOG_FATAL(
-            "SDL_Vulkan_GetInstanceExtensions failed: %s",
-            SDL_GetError()
-        );
+        LOG_FATAL("SDL_Vulkan_GetInstanceExtensions failed: %s", SDL_GetError());
         return false;
     }
     Array<const char*> layers = {};
@@ -601,19 +599,13 @@ bool InitVulkan(Arena* arena, SDL_Window* window) {
     }
 
 #ifndef NDEBUG
-    if (HasInstanceExtension(arena, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) &&
-        !CreateDebugMessenger()) {
+    if (HasInstanceExtension(arena, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) && !CreateDebugMessenger()) {
         LOG_WARN("Failed to create Vulkan debug messenger.");
     }
 #endif
 
     // The surface must be created after the instance and before picking a physical device
-    if (!SDL_Vulkan_CreateSurface(
-            window,
-            vk_state.instance,
-            nullptr,
-            &vk_state.surface
-        )) {
+    if (!SDL_Vulkan_CreateSurface(window, vk_state.instance, nullptr, &vk_state.surface)) {
         LOG_FATAL("SDL_Vulkan_CreateSurface failed: %s", SDL_GetError());
         return false;
     }

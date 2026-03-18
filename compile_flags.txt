@@ -2,10 +2,12 @@
 -Og
 -g3
 -DDEBUG
+-DSDL_DISABLE_OLD_NAMES
 
 -Isrc
 -Ilib/glm
 -Ilib/SDL/include
+-IC:/VulkanSDK/1.4.341.1/Include
 -I/usr/include
 -I/usr/local/include
 

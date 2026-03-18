@@ -4,7 +4,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "renderer/vulkan.h"
+#include "renderer/vulkan.cpp"
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -42,8 +42,7 @@ int main() {
     }
     sdl_initialized = true;
 
-    window =
-        SDL_CreateWindow("The Game", WIDTH, HEIGHT, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("The Game", WIDTH, HEIGHT, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (window == nullptr) {
         LOG_FATAL("SDL_CreateWindow failed: %s", SDL_GetError());
         return -1;

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdlib>
-#include <utility>
 
 #include "base/log.h"
 
@@ -59,30 +58,38 @@
 #if COMPILER_MSVC
 #define assume(expr) __assume(expr)
 #elif COMPILER_CLANG || COMPILER_GCC
-#define assume(expr)                                                                                                   \
-    do {                                                                                                               \
-        if (!(expr)) {                                                                                                 \
-            __builtin_unreachable();                                                                                   \
-        }                                                                                                              \
+#define assume(expr)                                                                               \
+    do {                                                                                           \
+        if (!(expr)) {                                                                             \
+            __builtin_unreachable();                                                               \
+        }                                                                                          \
     } while (0)
 #else
 #define assume(expr) ((void)0)
 #endif
 
-inline void DebugBreak() {
-#if COMPILER_MSVC
-    __debugbreak();
-#elif COMPILER_CLANG
-    __builtin_debugtrap();
-#elif COMPILER_GCC
-    __builtin_trap();
-#else
-    abort();
-#endif
+template <typename T> struct RemoveReference {
+    typedef T Type;
+};
+
+template <typename T> struct RemoveReference<T&> {
+    typedef T Type;
+};
+
+template <typename T> struct RemoveReference<T&&> {
+    typedef T Type;
+};
+
+template <typename T> constexpr T&& Forward(typename RemoveReference<T>::Type& value) {
+    return static_cast<T&&>(value);
+}
+
+template <typename T> constexpr T&& Forward(typename RemoveReference<T>::Type&& value) {
+    return static_cast<T&&>(value);
 }
 
 template <typename F> struct Defer {
-    Defer(F f) : f(f) {
+    explicit Defer(F&& f) : f(Forward<F>(f)) {
     }
     ~Defer() {
         f();
@@ -90,14 +97,14 @@ template <typename F> struct Defer {
     F f;
 };
 
-template <typename F> Defer<F> MakeDefer(F f) {
-    return Defer<F>(f);
+template <typename F> Defer<typename RemoveReference<F>::Type> MakeDefer(F&& f) {
+    return Defer<typename RemoveReference<F>::Type>(Forward<F>(f));
 };
 
 struct DeferDummy {};
 
-template <typename F> Defer<F> operator+(DeferDummy, F&& f) {
-    return MakeDefer<F>((F&&)f);
+template <typename F> Defer<typename RemoveReference<F>::Type> operator+(DeferDummy, F&& f) {
+    return MakeDefer<F>(Forward<F>(f));
 }
 
 inline bool IsPow2(u64 value) {
@@ -149,13 +156,39 @@ inline bool AlignUpPow2U64(u64 value, u64 alignment, u64* out) {
 }
 
 #ifndef NDEBUG
-#define assert(expr, msg)                                                                                                \
-    do {                                                                                                                 \
-        if (!(expr)) {                                                                                                   \
-            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                                                          \
-            DebugBreak();                                                                                                 \
-        }                                                                                                                \
+#if COMPILER_MSVC
+#define assert(expr, msg)                                                                          \
+    do {                                                                                           \
+        if (!(expr)) {                                                                             \
+            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                                    \
+            __debugbreak();                                                                        \
+        }                                                                                          \
     } while (0)
+#elif COMPILER_CLANG
+#define assert(expr, msg)                                                                          \
+    do {                                                                                           \
+        if (!(expr)) {                                                                             \
+            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                                    \
+            __builtin_debugtrap();                                                                 \
+        }                                                                                          \
+    } while (0)
+#elif COMPILER_GCC
+#define assert(expr, msg)                                                                          \
+    do {                                                                                           \
+        if (!(expr)) {                                                                             \
+            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                                    \
+            __builtin_trap();                                                                      \
+        }                                                                                          \
+    } while (0)
+#else
+#define assert(expr, msg)                                                                          \
+    do {                                                                                           \
+        if (!(expr)) {                                                                             \
+            LOG_FATAL("assertion failed: %s - %s", #expr, msg);                                    \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+#endif
 #else
 #define assert(expr, msg) ((void)sizeof((expr) ? true : false))
 #endif
