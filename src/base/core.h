@@ -49,6 +49,7 @@
 #endif
 
 #define BIT(x) (1ULL << (x))
+#define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 #define KB 1024ULL
 #define MB (KB * KB)
 #define GB (MB * KB)

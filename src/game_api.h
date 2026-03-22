@@ -1,6 +1,9 @@
 #pragma once
 
+#include "base/core.h"
+#include "base/lane.h"
 #include "base/typedef.h"
+#include "game/game_render_group.h"
 
 struct GameButtonState {
     b32 ended_down;
@@ -20,9 +23,22 @@ struct GameMemory {
     void *permanent_storage;
     u64 transient_storage_size;
     void *transient_storage;
+    RenderCommands *render_commands;
 };
 
-typedef void GameUpdateAndRender(GameMemory *memory, GameInput *input);
+struct GameFrameContext {
+    LaneContext *lane;
+};
+
+typedef void GameUpdateAndRender(
+    GameMemory *memory,
+    GameInput *input,
+    GameFrameContext *frame_context
+);
 
 #define GAME_UPDATE_AND_RENDER(name)                                           \
-    export void name(GameMemory *memory, GameInput *input)
+    export void name(                                                          \
+        GameMemory *memory,                                                    \
+        GameInput *input,                                                      \
+        GameFrameContext *frame_context                                        \
+    )

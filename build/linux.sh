@@ -29,8 +29,41 @@ COMMON_FLAGS=(
   -Wextra
   -Werror
   -Wno-unused-function
+  -Wno-missing-field-initializers
   -I"$ROOT_DIR/src"
 )
+
+SHADER_DIR="$ROOT_DIR/src/shaders"
+SHADER_OUT="$BIN_DIR/shaders"
+
+mkdir -p "$SHADER_OUT"
+
+SHADER_COMPILER=""
+for CANDIDATE in glslangValidator /usr/local/bin/glslangValidator /opt/homebrew/bin/glslangValidator; do
+  if [[ -x "$CANDIDATE" ]] || command -v "$CANDIDATE" >/dev/null 2>&1; then
+    SHADER_COMPILER="$CANDIDATE"
+    break
+  fi
+done
+
+if [[ -n "$SHADER_COMPILER" ]]; then
+  "$SHADER_COMPILER" -V "$SHADER_DIR/sprite.vert" -o "$SHADER_OUT/sprite.vert.spv"
+  "$SHADER_COMPILER" -V "$SHADER_DIR/sprite.frag" -o "$SHADER_OUT/sprite.frag.spv"
+elif command -v glslc >/dev/null 2>&1 || [[ -x /usr/local/bin/glslc ]] || [[ -x /opt/homebrew/bin/glslc ]]; then
+  GLSLC="$(command -v glslc || true)"
+  if [[ -z "$GLSLC" ]]; then
+    if [[ -x /usr/local/bin/glslc ]]; then
+      GLSLC=/usr/local/bin/glslc
+    else
+      GLSLC=/opt/homebrew/bin/glslc
+    fi
+  fi
+  "$GLSLC" "$SHADER_DIR/sprite.vert" -o "$SHADER_OUT/sprite.vert.spv"
+  "$GLSLC" "$SHADER_DIR/sprite.frag" -o "$SHADER_OUT/sprite.frag.spv"
+else
+  printf 'missing shader compiler: glslangValidator or glslc\n' >&2
+  exit 1
+fi
 
 read -r -a GLFW_CFLAGS <<<"$(pkg-config --cflags glfw3)"
 read -r -a GLFW_LIBS <<<"$(pkg-config --libs glfw3)"
@@ -68,6 +101,7 @@ VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -lvulkan)
   "${GLFW_LIBS[@]}" \
   "${VULKAN_LIBS[@]}" \
   -ldl \
+  -pthread \
   -o "$BIN_DIR/main"
 
 "$CXX" \
@@ -75,7 +109,7 @@ VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -lvulkan)
   "${MODE_FLAGS[@]}" \
   -shared \
   -fPIC \
-  "$ROOT_DIR/src/game.cpp" \
+  "$ROOT_DIR/src/game/game.cpp" \
   -o "$BIN_DIR/libgame.so"
 
 printf 'built %s/main\n' "$BIN_DIR"
