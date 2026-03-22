@@ -15,7 +15,7 @@ struct Arena {
     u64 committed;
     u64 chunk_size;
     u64 pos;
-    s32 temp_count;
+    i32 temp_count;
 };
 
 struct TemporaryMemory {
@@ -35,7 +35,7 @@ align_up(u64 value, u64 alignment) {
     assert(is_pow2(alignment), "Arena alignment must be a power of two!");
 
     u64 result = 0;
-    b32 overflow = align_up_pow2_u64(value, alignment, &result);
+    bool overflow = align_up_pow2_u64(value, alignment, &result);
     assert(!overflow, "Arena alignment overflow!");
     return result;
 }
@@ -45,7 +45,7 @@ allocate_and_commit(Arena *arena, u64 size) {
     assert(arena != nullptr, "Arena must not be null!");
 
     u64 new_pos = 0;
-    b32 overflow = add_u64_overflow(arena->pos, size, &new_pos);
+    bool overflow = add_u64_overflow(arena->pos, size, &new_pos);
     assert(!overflow, "Arena position overflow!");
     assert(new_pos <= arena->capacity, "Virtual address space exhausted!");
 
@@ -72,7 +72,7 @@ push_size_(Arena *arena, u64 size, u64 alignment) {
         (alignment - (current_ptr & (alignment - 1))) & (alignment - 1);
 
     u64 total_size = 0;
-    b32 overflow = add_u64_overflow(size, padding, &total_size);
+    bool overflow = add_u64_overflow(size, padding, &total_size);
     assert(!overflow, "Arena push size overflow!");
 
     u8 *result_with_padding = (u8 *)allocate_and_commit(arena, total_size);

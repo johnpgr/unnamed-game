@@ -9,9 +9,9 @@
 #define MAX_LANES 64
 
 struct LaneBarrier {
-    volatile s64 count;
-    volatile s64 generation;
-    s64 thread_count;
+    volatile i64 count;
+    volatile i64 generation;
+    i64 thread_count;
     volatile u64 shared_u64;
 };
 
@@ -73,8 +73,8 @@ lane_sync(void) {
         return;
     }
 
-    s64 generation = barrier->generation;
-    s64 arrived = __sync_add_and_fetch(&barrier->count, 1);
+    i64 generation = barrier->generation;
+    i64 arrived = __sync_add_and_fetch(&barrier->count, 1);
     if(arrived == barrier->thread_count) {
         __sync_synchronize();
         __sync_lock_test_and_set(&barrier->count, 0);
@@ -98,7 +98,7 @@ lane_range(u64 count) {
     u64 total = lane_count();
     u64 per_lane = count / total;
     u64 leftover = count % total;
-    b32 gets_leftover = (idx < leftover);
+    bool gets_leftover = (idx < leftover);
     u64 leftovers_before = gets_leftover ? idx : leftover;
     u64 first = (per_lane * idx) + leftovers_before;
     u64 opl = first + per_lane + (gets_leftover ? 1 : 0);

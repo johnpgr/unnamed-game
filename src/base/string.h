@@ -21,7 +21,7 @@ string_substring(String source, u64 start, u64 end) {
     return result;
 }
 
-inline b32
+inline bool
 string_equals(String a, String b) {
     if(a.size != b.size) {
         return false;

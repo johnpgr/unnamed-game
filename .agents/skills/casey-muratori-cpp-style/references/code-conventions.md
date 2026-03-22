@@ -62,17 +62,17 @@ internal void
 draw_rectangle(LoadedBitmap *buffer, V2 min, V2 max, f32 r, f32 g, f32 b) {
     // Return type on its own line, function name + opening brace on the next
 
-    s32 min_x = round_f32_to_s32(min.x);
-    s32 min_y = round_f32_to_s32(min.y);
-    s32 max_x = round_f32_to_s32(max.x);
-    s32 max_y = round_f32_to_s32(max.y);
+    i32 min_x = round_f32_to_s32(min.x);
+    i32 min_y = round_f32_to_s32(min.y);
+    i32 max_x = round_f32_to_s32(max.x);
+    i32 max_y = round_f32_to_s32(max.y);
 
     if(min_x < 0) {
         min_x = 0;
     }
 
-    for(s32 y = min_y; y < max_y; ++y) {
-        for(s32 x = min_x; x < max_x; ++x) {
+    for(i32 y = min_y; y < max_y; ++y) {
+        for(i32 x = min_x; x < max_x; ++x) {
             // ...
         }
     }
@@ -116,10 +116,10 @@ Always define short aliases for fixed-width types at the top of your platform he
 ```cpp
 #include <stdint.h>
 
-typedef int8_t    s8;
-typedef int16_t   s16;
-typedef int32_t   s32;
-typedef int64_t   s64;
+typedef int8_t    i8;
+typedef int16_t   i16;
+typedef int32_t   i32;
+typedef int64_t   i64;
 
 typedef uint8_t   u8;
 typedef uint16_t  u16;
@@ -129,7 +129,6 @@ typedef uint64_t  u64;
 typedef float     f32;
 typedef double    f64;
 
-typedef s32       b32;  // 32-bit boolean (TRUE/FALSE, not true/false)
 typedef size_t    MemoryIndex;
 ```
 
@@ -288,7 +287,7 @@ struct MemoryArena {
     u8 *base;
     MemoryIndex used;
 
-    s32 temp_count;  // Track outstanding temporary memory blocks
+    i32 temp_count;  // Track outstanding temporary memory blocks
 };
 
 struct TemporaryMemory {
@@ -393,12 +392,12 @@ input:
 
 ```cpp
 // Immediate-mode button: returns true the frame it's clicked
-internal b32
+internal bool
 do_button(UiContext *ui, char *text, V2 position, V2 size) {
-    b32 result = false;
+    bool result = false;
 
     V2 mouse_p = ui->mouse_p;
-    b32 is_hot = (mouse_p.x >= position.x && mouse_p.x < position.x + size.x &&
+    bool is_hot = (mouse_p.x >= position.x && mouse_p.x < position.x + size.x &&
                   mouse_p.y >= position.y && mouse_p.y < position.y + size.y);
 
     V4 color = is_hot ? v4(0.8f, 0.8f, 0.2f, 1.0f) : v4(0.5f, 0.5f, 0.5f, 1.0f);
@@ -450,9 +449,9 @@ struct Entity {
     f32 t_bob;
 
     // Gameplay
-    s32 hit_point_max;
-    s32 hit_points;
-    b32 collides;
+    i32 hit_point_max;
+    i32 hit_points;
+    bool collides;
     f32 distance_limit;  // For swords, projectiles, etc.
 };
 ```
@@ -537,14 +536,14 @@ zero_size(MemoryIndex size, void *ptr) {
 // or
 #include <x86intrin.h>  // GCC/Clang
 
-inline s32
+inline i32
 round_f32_to_s32(f32 value) {
-    s32 result = (s32)roundf(value);
+    i32 result = (i32)roundf(value);
     return(result);
 }
 
 inline u32
-rotate_left(u32 value, s32 amount) {
+rotate_left(u32 value, i32 amount) {
     u32 result = _rotl(value, amount);
     return(result);
 }

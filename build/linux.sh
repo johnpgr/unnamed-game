@@ -33,7 +33,7 @@ COMMON_FLAGS=(
   -I"$ROOT_DIR/src"
 )
 
-SHADER_DIR="$ROOT_DIR/src/shaders"
+SHADER_DIR="$ROOT_DIR/assets/shaders"
 SHADER_OUT="$BIN_DIR/shaders"
 
 mkdir -p "$SHADER_OUT"
@@ -91,6 +91,14 @@ fi
 
 VULKAN_CFLAGS=(-I"$VULKAN_INCLUDE_DIR")
 VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -lvulkan)
+
+"$CXX" \
+  "${COMMON_FLAGS[@]}" \
+  "${MODE_FLAGS[@]}" \
+  "${GLFW_CFLAGS[@]}" \
+  "${VULKAN_CFLAGS[@]}" \
+  -fsyntax-only \
+  "$ROOT_DIR/src/renderer/vulkan.cpp"
 
 "$CXX" \
   "${COMMON_FLAGS[@]}" \

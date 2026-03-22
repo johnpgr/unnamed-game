@@ -91,17 +91,17 @@ Follow this checklist for every piece of code you write under this style:
   (e.g., `push_struct`, `push_array`, `array_count`).
 - **Typedef'd base types:** Short lowercase names:
   ```cpp
-  typedef int8_t   s8;
-  typedef int16_t  s16;
-  typedef int32_t  s32;
-  typedef int64_t  s64;
+  typedef int8_t   i8;
+  typedef int16_t  i16;
+  typedef int32_t  i32;
+  typedef int64_t  i64;
   typedef uint8_t  u8;
   typedef uint16_t u16;
   typedef uint32_t u32;
   typedef uint64_t u64;
   typedef float    f32;
   typedef double   f64;
-  typedef int32_t  b32; // boolean stored as 32-bit int
+  // use built-in bool
   ```
 
 ### Brace Style (K&R)
@@ -252,9 +252,9 @@ struct Entity {
     f32 height;
     u32 facing_direction;
     f32 t_bob;
-    s32 hit_point_max;
-    s32 hit_points;
-    b32 collides;
+    i32 hit_point_max;
+    i32 hit_points;
+    bool collides;
 };
 
 struct GameState {

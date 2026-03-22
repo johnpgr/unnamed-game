@@ -6,7 +6,7 @@
 #include "game/game_render_group.h"
 
 struct GameButtonState {
-    b32 ended_down;
+    bool ended_down;
 };
 
 struct GameInput {
@@ -18,7 +18,7 @@ struct GameInput {
 };
 
 struct GameMemory {
-    b32 is_initialized;
+    bool is_initialized;
     u64 permanent_storage_size;
     void *permanent_storage;
     u64 transient_storage_size;

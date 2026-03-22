@@ -28,14 +28,14 @@
 struct GameCode {
     void *library;
     GameUpdateAndRender *update_and_render;
-    b32 is_valid;
+    bool is_valid;
 };
 
 struct FrameDispatch {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     u64 frame_index;
-    b32 shutdown;
+    bool shutdown;
 };
 
 struct WorkerThreadParams {
@@ -49,8 +49,8 @@ struct WorkerThreadParams {
 
 global_variable Arena global_arena;
 global_variable GLFWwindow *global_window;
-global_variable b32 global_glfw_initialized;
-global_variable b32 global_renderer_initialized;
+global_variable bool global_glfw_initialized;
+global_variable bool global_renderer_initialized;
 global_variable GameCode global_game_code;
 global_variable GameMemory global_game_memory;
 
@@ -65,7 +65,7 @@ unload_game_code(GameCode *game_code) {
     game_code->is_valid = false;
 }
 
-internal b32
+internal bool
 get_executable_directory(char *buffer, u64 buffer_size) {
     assert(buffer != nullptr, "Executable path buffer must not be null!");
     assert(buffer_size > 0, "Executable path buffer must not be empty!");
@@ -97,7 +97,7 @@ get_executable_directory(char *buffer, u64 buffer_size) {
     return true;
 }
 
-internal b32
+internal bool
 build_game_library_path(char *buffer, u64 buffer_size) {
     assert(buffer != nullptr, "Game path buffer must not be null!");
 
@@ -127,7 +127,7 @@ build_game_library_path(char *buffer, u64 buffer_size) {
     return (written > 0) && ((u64)written < buffer_size);
 }
 
-internal b32
+internal bool
 load_game_code(GameCode *game_code) {
     assert(game_code != nullptr, "Game code must not be null!");
 
@@ -212,7 +212,7 @@ get_lane_count_from_system(void) {
     return (u32)cpu_count;
 }
 
-internal b32
+internal bool
 init_frame_dispatch(FrameDispatch *dispatch) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
 
@@ -255,7 +255,7 @@ signal_shutdown(FrameDispatch *dispatch) {
     pthread_mutex_unlock(&dispatch->mutex);
 }
 
-internal b32
+internal bool
 wait_for_frame_start(FrameDispatch *dispatch, u64 *frame_index) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
     assert(frame_index != nullptr, "Frame index must not be null!");
@@ -265,7 +265,7 @@ wait_for_frame_start(FrameDispatch *dispatch, u64 *frame_index) {
         pthread_cond_wait(&dispatch->cond, &dispatch->mutex);
     }
 
-    b32 should_run = !dispatch->shutdown;
+    bool should_run = !dispatch->shutdown;
     *frame_index = dispatch->frame_index;
     pthread_mutex_unlock(&dispatch->mutex);
     return should_run;
@@ -318,7 +318,7 @@ main(void) {
     LaneContext main_lane_context = {};
     GameFrameContext main_game_frame_context = {};
     FrameDispatch frame_dispatch = {};
-    b32 frame_dispatch_initialized = false;
+    bool frame_dispatch_initialized = false;
     pthread_t worker_threads[MAX_LANES] = {};
     WorkerThreadParams worker_params[MAX_LANES] = {};
     u32 worker_thread_count = 0;

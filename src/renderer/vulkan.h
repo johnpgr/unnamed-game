@@ -30,9 +30,9 @@ struct VulkanState {
     VkSurfaceKHR surface;
     u32 graphics_queue_family_index;
     VkDebugUtilsMessengerEXT debug_messenger;
-    b32 dynamic_rendering_supported;
-    b32 initialized;
-    volatile b32 fatal_error;
+    bool dynamic_rendering_supported;
+    bool initialized;
+    volatile bool fatal_error;
 
     VkSwapchainKHR swapchain;
     VkFormat swapchain_format;
@@ -56,13 +56,13 @@ struct VulkanState {
     VkPipeline sprite_pipeline;
 
     u32 frame_image_index;
-    b32 frame_active;
+    bool frame_active;
 
     PFN_vkCmdBeginRenderingKHR cmd_begin_rendering;
     PFN_vkCmdEndRenderingKHR cmd_end_rendering;
 };
 
-b32 init_vulkan(Arena *arena, GLFWwindow *window, u32 lane_count);
+bool init_vulkan(Arena *arena, GLFWwindow *window, u32 lane_count);
 void cleanup_vulkan(void);
-b32 begin_frame(void);
-b32 render_group_to_output(RenderCommands *commands);
+bool begin_frame(void);
+bool render_group_to_output(RenderCommands *commands);
