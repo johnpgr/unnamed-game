@@ -41,24 +41,21 @@ struct GameCode {
     bool is_valid;
 };
 
-struct FrameDispatch {
-    ThreadMutex mutex;
-    ThreadConditionVariable cond;
-    u64 frame_index;
-    bool shutdown;
+struct FrameLoopState {
+    GameCode *game_code;
+    GameMemory *game_memory;
+    GameInput *input;
+    GLFWwindow *window;
+    volatile bool startup_complete;
+    volatile bool running;
+    volatile bool frame_failed;
+    f64 last_counter;
 };
 
 struct WorkerThreadParams {
     LaneContext lane_context;
-    GameFrameContext game_frame_context;
-    GameCode *game_code;
-    GameMemory *game_memory;
-    GameInput *input;
-    FrameDispatch *dispatch;
+    FrameLoopState *frame_loop_state;
 };
-
-internal void destroy_frame_dispatch(FrameDispatch *dispatch);
-internal void signal_shutdown(FrameDispatch *dispatch);
 
 internal void unload_game_code(GameCode *game_code) {
     if(game_code->library != nullptr) {
@@ -170,60 +167,6 @@ internal void update_input(GLFWwindow *window, GameInput *input) {
     input->move_right.ended_down = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
 }
 
-internal bool init_frame_dispatch(FrameDispatch *dispatch) {
-    assert(dispatch != nullptr, "Frame dispatch must not be null!");
-
-    *dispatch = {};
-    if(!init_thread_mutex(&dispatch->mutex)) {
-        return false;
-    }
-    if(!init_thread_condition_variable(&dispatch->cond)) {
-        destroy_thread_mutex(&dispatch->mutex);
-        return false;
-    }
-
-    return true;
-}
-
-internal void destroy_frame_dispatch(FrameDispatch *dispatch) {
-    assert(dispatch != nullptr, "Frame dispatch must not be null!");
-    destroy_thread_condition_variable(&dispatch->cond);
-    destroy_thread_mutex(&dispatch->mutex);
-}
-
-internal void signal_frame_start(FrameDispatch *dispatch) {
-    assert(dispatch != nullptr, "Frame dispatch must not be null!");
-
-    lock_thread_mutex(&dispatch->mutex);
-    ++dispatch->frame_index;
-    wake_all_thread_condition_variable(&dispatch->cond);
-    unlock_thread_mutex(&dispatch->mutex);
-}
-
-internal void signal_shutdown(FrameDispatch *dispatch) {
-    assert(dispatch != nullptr, "Frame dispatch must not be null!");
-
-    lock_thread_mutex(&dispatch->mutex);
-    dispatch->shutdown = true;
-    wake_all_thread_condition_variable(&dispatch->cond);
-    unlock_thread_mutex(&dispatch->mutex);
-}
-
-internal bool wait_for_frame_start(FrameDispatch *dispatch, u64 *frame_index) {
-    assert(dispatch != nullptr, "Frame dispatch must not be null!");
-    assert(frame_index != nullptr, "Frame index must not be null!");
-
-    lock_thread_mutex(&dispatch->mutex);
-    while(!dispatch->shutdown && *frame_index == dispatch->frame_index) {
-        wait_thread_condition_variable(&dispatch->cond, &dispatch->mutex);
-    }
-
-    bool should_run = !dispatch->shutdown;
-    *frame_index = dispatch->frame_index;
-    unlock_thread_mutex(&dispatch->mutex);
-    return should_run;
-}
-
 internal void init_render_commands(
     Arena *arena,
     RenderCommands *commands,
@@ -246,20 +189,79 @@ internal void init_render_commands(
     }
 }
 
+internal void run_frame_loop(WorkerThreadParams *params) {
+    assert(params != nullptr, "Worker params must not be null!");
+    assert(
+        params->frame_loop_state != nullptr,
+        "Frame loop state must not be null!"
+    );
+
+    FrameLoopState *frame_loop_state = params->frame_loop_state;
+    GameFrameContext game_frame_context = {};
+    game_frame_context.lane = &params->lane_context;
+
+    set_lane_context(&params->lane_context);
+
+    while(!frame_loop_state->startup_complete) {
+        lane_pause();
+    }
+
+    while(frame_loop_state->running) {
+        if(lane_idx() == 0) {
+            glfwPollEvents();
+            frame_loop_state->running =
+                !glfwWindowShouldClose(frame_loop_state->window);
+
+            if(frame_loop_state->running) {
+                f64 current_counter = glfwGetTime();
+                *frame_loop_state->input = {};
+                frame_loop_state->input->dt_for_frame =
+                    (f32)(current_counter - frame_loop_state->last_counter);
+                frame_loop_state->last_counter = current_counter;
+                update_input(frame_loop_state->window, frame_loop_state->input);
+
+                if(!begin_frame()) {
+                    frame_loop_state->frame_failed = true;
+                    frame_loop_state->running = false;
+                } else {
+                    RenderCommands *commands =
+                        frame_loop_state->game_memory->render_commands;
+                    commands->screen_width = vk_state.swapchain_extent.width;
+                    commands->screen_height = vk_state.swapchain_extent.height;
+                }
+            }
+        }
+
+        lane_sync();
+        if(!frame_loop_state->running) {
+            break;
+        }
+
+        RenderCommands *commands =
+            frame_loop_state->game_memory->render_commands;
+        LanePushBuffer *lane_buffer = commands->lane_buffers + lane_idx();
+        lane_buffer->used = 0;
+        lane_buffer->entry_count = 0;
+
+        frame_loop_state->game_code->update_and_render(
+            frame_loop_state->game_memory,
+            frame_loop_state->input,
+            &game_frame_context
+        );
+
+        if(!render_group_to_output(commands) && lane_idx() == 0) {
+            frame_loop_state->frame_failed = true;
+            frame_loop_state->running = false;
+        }
+
+        lane_sync();
+    }
+}
+
 internal ThreadProcResult THREAD_PROC_CALL
 game_worker_thread(void *raw_params) {
     WorkerThreadParams *params = (WorkerThreadParams *)raw_params;
-    set_lane_context(&params->lane_context);
-
-    u64 frame_index = 0;
-    while(wait_for_frame_start(params->dispatch, &frame_index)) {
-        params->game_code->update_and_render(
-            params->game_memory,
-            params->input,
-            &params->game_frame_context
-        );
-        render_group_to_output(params->game_memory->render_commands);
-    }
+    run_frame_loop(params);
 
     return THREAD_PROC_SUCCESS;
 }
@@ -267,13 +269,8 @@ game_worker_thread(void *raw_params) {
 int main(void) {
     int result = 0;
     char const *description = nullptr;
-    f64 last_counter = 0.0;
     u32 lane_count = clamp(get_logical_processor_count(), 1U, MAX_LANES);
     LaneBarrier frame_barrier = {};
-    LaneContext main_lane_context = {};
-    GameFrameContext main_game_frame_context = {};
-    FrameDispatch frame_dispatch = {};
-    bool frame_dispatch_initialized = false;
     Thread worker_threads[MAX_LANES] = {};
     WorkerThreadParams worker_params[MAX_LANES] = {};
     u32 worker_thread_count = 0;
@@ -284,6 +281,8 @@ int main(void) {
     bool renderer_initialized = false;
     GameCode game_code = {};
     GameMemory game_memory = {};
+    FrameLoopState frame_loop_state = {};
+    WorkerThreadParams *main_params = worker_params;
 
     arena = create_arena();
     game_memory.permanent_storage_size = PERMANENT_STORAGE_SIZE;
@@ -293,19 +292,12 @@ int main(void) {
     game_memory.render_commands = push_struct(&arena, RenderCommands);
     init_render_commands(&arena, game_memory.render_commands, lane_count);
 
-    init_lane_barrier(&frame_barrier, lane_count);
-    main_lane_context.lane_idx = 0;
-    main_lane_context.lane_count = lane_count;
-    main_lane_context.barrier = &frame_barrier;
-    main_game_frame_context.lane = &main_lane_context;
-    set_lane_context(&main_lane_context);
-
-    if(!init_frame_dispatch(&frame_dispatch)) {
-        LOG_FATAL("Failed to initialize frame dispatch.");
-        result = -1;
-        goto cleanup;
-    }
-    frame_dispatch_initialized = true;
+    frame_loop_state.game_code = &game_code;
+    frame_loop_state.game_memory = &game_memory;
+    frame_loop_state.input = &input;
+    frame_loop_state.startup_complete = false;
+    frame_loop_state.running = true;
+    frame_loop_state.frame_failed = false;
 
     if(!glfwInit()) {
         LOG_FATAL("glfwInit failed");
@@ -345,67 +337,55 @@ int main(void) {
     }
     renderer_initialized = true;
 
+    main_params->lane_context.lane_idx = 0;
+    main_params->lane_context.barrier = &frame_barrier;
+    main_params->frame_loop_state = &frame_loop_state;
+
     for(u32 lane_index = 1; lane_index < lane_count; ++lane_index) {
         WorkerThreadParams *params = worker_params + lane_index;
         params->lane_context.lane_idx = lane_index;
-        params->lane_context.lane_count = lane_count;
         params->lane_context.barrier = &frame_barrier;
-        params->game_frame_context.lane = &params->lane_context;
-        params->game_code = &game_code;
-        params->game_memory = &game_memory;
-        params->input = &input;
-        params->dispatch = &frame_dispatch;
+        params->frame_loop_state = &frame_loop_state;
 
         if(!create_thread(
                worker_threads + lane_index,
                game_worker_thread,
                params
            )) {
-            LOG_FATAL("Failed to create worker thread %u.", lane_index);
-            result = -1;
-            goto cleanup;
+            LOG_WARN(
+                "Failed to create worker thread %u. Falling back to %u lanes.",
+                lane_index,
+                lane_index
+            );
+            lane_count = lane_index;
+            break;
         }
 
         ++worker_thread_count;
     }
 
-    last_counter = glfwGetTime();
-    while(!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+    for(u32 lane_index = 0; lane_index < lane_count; ++lane_index) {
+        worker_params[lane_index].lane_context.lane_count = lane_count;
+    }
 
-        f64 current_counter = glfwGetTime();
-        input = {};
-        input.dt_for_frame = (f32)(current_counter - last_counter);
-        last_counter = current_counter;
-        update_input(window, &input);
+    game_memory.render_commands->active_lane_count = lane_count;
+    vk_state.active_lane_count = lane_count;
+    init_lane_barrier(&frame_barrier, lane_count);
 
-        if(!begin_frame()) {
-            result = -1;
-            break;
-        }
+    frame_loop_state.window = window;
+    frame_loop_state.last_counter = glfwGetTime();
+    frame_loop_state.startup_complete = true;
 
-        RenderCommands *commands = game_memory.render_commands;
-        reset_render_commands(commands);
-        commands->screen_width = vk_state.swapchain_extent.width;
-        commands->screen_height = vk_state.swapchain_extent.height;
-
-        signal_frame_start(&frame_dispatch);
-
-        game_code
-            .update_and_render(&game_memory, &input, &main_game_frame_context);
-        if(!render_group_to_output(commands)) {
-            result = -1;
-            break;
-        }
+    run_frame_loop(main_params);
+    if(frame_loop_state.frame_failed) {
+        result = -1;
     }
 
 cleanup:
-    if(frame_dispatch_initialized)
-        signal_shutdown(&frame_dispatch);
+    frame_loop_state.running = false;
+    frame_loop_state.startup_complete = true;
     for(u32 lane_index = 1; lane_index <= worker_thread_count; ++lane_index)
         join_thread(worker_threads + lane_index);
-    if(frame_dispatch_initialized)
-        destroy_frame_dispatch(&frame_dispatch);
     unload_game_code(&game_code);
     if(renderer_initialized)
         cleanup_vulkan();
