@@ -50,8 +50,7 @@ inline void log_write(
     ...
 ) __attribute__((format(printf, 4, 5)));
 
-inline void
-log_write_v(
+inline void log_write_v(
     LogLevel level,
     char const *file,
     int line,
@@ -82,8 +81,13 @@ log_write_v(
     (void)fputs(out, stream);
 }
 
-inline void
-log_write(LogLevel level, char const *file, int line, char const *fmt, ...) {
+inline void log_write(
+    LogLevel level,
+    char const *file,
+    int line,
+    char const *fmt,
+    ...
+) {
     va_list args;
     va_start(args, fmt);
     log_write_v(level, file, line, fmt, args);

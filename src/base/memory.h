@@ -14,8 +14,7 @@
 #include <unistd.h>
 #endif
 
-inline void
-fatal_system_call(char const *operation) {
+inline void fatal_system_call(char const *operation) {
     assert(operation != nullptr, "Operation name must not be null!");
 
 #if OS_WINDOWS
@@ -37,8 +36,7 @@ fatal_system_call(char const *operation) {
     abort();
 }
 
-inline void *
-reserve_system_memory(u64 size) {
+inline void *reserve_system_memory(u64 size) {
 #if OS_WINDOWS
     void *ptr = VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_NOACCESS);
     if(ptr == nullptr) {
@@ -61,8 +59,7 @@ reserve_system_memory(u64 size) {
 #endif
 }
 
-inline u64
-get_system_page_size(void) {
+inline u64 get_system_page_size(void) {
 #if OS_WINDOWS
     SYSTEM_INFO system_info = {};
     GetSystemInfo(&system_info);
@@ -77,8 +74,7 @@ get_system_page_size(void) {
 #endif
 }
 
-inline void
-commit_system_memory(void *ptr, u64 size) {
+inline void commit_system_memory(void *ptr, u64 size) {
     if(size == 0) {
         return;
     }
@@ -95,8 +91,7 @@ commit_system_memory(void *ptr, u64 size) {
 #endif
 }
 
-inline void
-decommit_system_memory(void *ptr, u64 size) {
+inline void decommit_system_memory(void *ptr, u64 size) {
     if(size == 0) {
         return;
     }
@@ -115,8 +110,7 @@ decommit_system_memory(void *ptr, u64 size) {
 #endif
 }
 
-inline void
-release_system_memory(void *ptr, u64 size) {
+inline void release_system_memory(void *ptr, u64 size) {
 #if OS_WINDOWS
     (void)size;
     if(ptr == nullptr) {

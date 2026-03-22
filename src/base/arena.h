@@ -29,8 +29,7 @@ struct TemporaryMemory {
     (type *)push_size_(arena, (count) * sizeof(type), alignof(type))
 #define push_size(arena, size) push_size_(arena, size, 4)
 
-internal u64
-align_up(u64 value, u64 alignment) {
+internal u64 align_up(u64 value, u64 alignment) {
     assert(alignment != 0, "Arena alignment must be non-zero!");
     assert(is_pow2(alignment), "Arena alignment must be a power of two!");
 
@@ -40,8 +39,7 @@ align_up(u64 value, u64 alignment) {
     return result;
 }
 
-internal void *
-allocate_and_commit(Arena *arena, u64 size) {
+internal void *allocate_and_commit(Arena *arena, u64 size) {
     assert(arena != nullptr, "Arena must not be null!");
 
     u64 new_pos = 0;
@@ -61,8 +59,7 @@ allocate_and_commit(Arena *arena, u64 size) {
     return result;
 }
 
-internal void *
-push_size_(Arena *arena, u64 size, u64 alignment) {
+internal void *push_size_(Arena *arena, u64 size, u64 alignment) {
     assert(arena != nullptr, "Arena must not be null!");
     assert(alignment != 0, "Arena push alignment must be non-zero!");
     assert(is_pow2(alignment), "Arena push alignment must be a power of two!");
@@ -81,8 +78,7 @@ push_size_(Arena *arena, u64 size, u64 alignment) {
     return result;
 }
 
-internal TemporaryMemory
-begin_temporary_memory(Arena *arena) {
+internal TemporaryMemory begin_temporary_memory(Arena *arena) {
     assert(arena != nullptr, "Arena must not be null!");
 
     TemporaryMemory result = {};
@@ -92,8 +88,7 @@ begin_temporary_memory(Arena *arena) {
     return result;
 }
 
-internal void
-end_temporary_memory(TemporaryMemory temporary_memory) {
+internal void end_temporary_memory(TemporaryMemory temporary_memory) {
     Arena *arena = temporary_memory.arena;
     assert(arena != nullptr, "Temporary arena must not be null!");
     assert(
@@ -106,8 +101,7 @@ end_temporary_memory(TemporaryMemory temporary_memory) {
     --arena->temp_count;
 }
 
-internal void
-clear_arena(Arena *arena) {
+internal void clear_arena(Arena *arena) {
     assert(arena != nullptr, "Arena must not be null!");
     assert(
         arena->temp_count == 0,
@@ -116,8 +110,7 @@ clear_arena(Arena *arena) {
     arena->pos = 0;
 }
 
-internal void
-release_arena(Arena *arena) {
+internal void release_arena(Arena *arena) {
     assert(arena != nullptr, "Arena must not be null!");
 
     if(arena->base != nullptr && arena->capacity != 0) {
@@ -127,8 +120,7 @@ release_arena(Arena *arena) {
     *arena = {};
 }
 
-internal Arena
-create_arena(u64 chunk_size = 4 * KB) {
+internal Arena create_arena(u64 chunk_size = 4 * KB) {
     Arena arena = {};
     u64 page_size = get_system_page_size();
 

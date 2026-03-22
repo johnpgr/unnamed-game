@@ -17,8 +17,11 @@ struct GameState {
     Entity entities[4096];
 };
 
-internal void
-clamp_entity_to_screen(Entity *entity, f32 screen_width, f32 screen_height) {
+internal void clamp_entity_to_screen(
+    Entity *entity,
+    f32 screen_width,
+    f32 screen_height
+) {
     assert(entity != nullptr, "Entity must not be null!");
 
     f32 half_width = 0.5f * entity->width;
@@ -42,8 +45,11 @@ clamp_entity_to_screen(Entity *entity, f32 screen_width, f32 screen_height) {
     }
 }
 
-internal void
-init_game_state(GameState *state, u32 screen_width, u32 screen_height) {
+internal void init_game_state(
+    GameState *state,
+    u32 screen_width,
+    u32 screen_height
+) {
     assert(state != nullptr, "Game state must not be null!");
 
     u32 width = (screen_width > 0) ? screen_width : 800;
@@ -144,10 +150,10 @@ GAME_UPDATE_AND_RENDER(game_update_and_render) {
                 direction.x += 1.0f;
             }
             if(input->move_up.ended_down) {
-                direction.y -= 1.0f;
+                direction.y += 1.0f;
             }
             if(input->move_down.ended_down) {
-                direction.y += 1.0f;
+                direction.y -= 1.0f;
             }
 
             entity->p += direction * (280.0f * input->dt_for_frame);

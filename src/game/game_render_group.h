@@ -47,8 +47,11 @@ struct RenderCommands {
 #define push_render_entry(commands, type_enum, Type)                           \
     (Type *)push_render_entry_((commands), sizeof(Type), (type_enum))
 
-internal void *
-push_render_entry_(RenderCommands *commands, u32 size, RenderEntryType type) {
+internal void *push_render_entry_(
+    RenderCommands *commands,
+    u32 size,
+    RenderEntryType type
+) {
     assert(commands != nullptr, "Render commands must not be null!");
     u32 idx = lane_idx();
     assert(idx < commands->active_lane_count, "Lane index out of range!");
@@ -68,15 +71,13 @@ push_render_entry_(RenderCommands *commands, u32 size, RenderEntryType type) {
     return header;
 }
 
-internal void
-push_clear(RenderCommands *commands, vec4 color) {
+internal void push_clear(RenderCommands *commands, vec4 color) {
     RenderEntryClear *entry =
         push_render_entry(commands, render_entry_type_clear, RenderEntryClear);
     entry->color = color;
 }
 
-internal void
-push_rect(
+internal void push_rect(
     RenderCommands *commands,
     vec2 p,
     f32 width,
@@ -93,8 +94,7 @@ push_rect(
     entry->header.sort_key = sort_key;
 }
 
-internal void
-reset_render_commands(RenderCommands *commands) {
+internal void reset_render_commands(RenderCommands *commands) {
     assert(commands != nullptr, "Render commands must not be null!");
 
     for(u32 lane_index = 0; lane_index < commands->active_lane_count;

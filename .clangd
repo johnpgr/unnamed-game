@@ -26,3 +26,5 @@ Diagnostics:
       - bugprone-suspicious-include
       - misc-non-private-member-variables-in-classes
       - bugprone-easily-swappable-parameters
+      - misc-use-anonymous-namespace
+      - misc-use-internal-linkage
