@@ -1,10 +1,10 @@
 #include "base/arena.h"
 #include "base/core.h"
 #include "base/log.h"
+#include "base/threads/threads_win32.cpp"
+#include "base/threads/threads_posix.cpp"
 
 #include "game_api.h"
-
-#include <pthread.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -25,6 +25,16 @@
 #define PERMANENT_STORAGE_SIZE (64 * MB)
 #define TRANSIENT_STORAGE_SIZE (64 * MB)
 
+#if OS_WINDOWS
+#define DYNLIB(name) name ".dll"
+#elif OS_MAC
+#define DYNLIB(name) "lib" name ".dylib"
+#elif OS_LINUX
+#define DYNLIB(name) "lib" name ".so"
+#else
+#define DYNLIB(name) name
+#endif
+
 struct GameCode {
     void *library;
     GameUpdateAndRender *update_and_render;
@@ -32,8 +42,8 @@ struct GameCode {
 };
 
 struct FrameDispatch {
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    ThreadMutex mutex;
+    ThreadConditionVariable cond;
     u64 frame_index;
     bool shutdown;
 };
@@ -47,15 +57,10 @@ struct WorkerThreadParams {
     FrameDispatch *dispatch;
 };
 
-global_variable Arena global_arena;
-global_variable GLFWwindow *global_window;
-global_variable bool global_glfw_initialized;
-global_variable bool global_renderer_initialized;
-global_variable GameCode global_game_code;
-global_variable GameMemory global_game_memory;
+internal void destroy_frame_dispatch(FrameDispatch *dispatch);
+internal void signal_shutdown(FrameDispatch *dispatch);
 
-internal void
-unload_game_code(GameCode *game_code) {
+internal void unload_game_code(GameCode *game_code) {
     if(game_code->library != nullptr) {
         dlclose(game_code->library);
     }
@@ -65,8 +70,7 @@ unload_game_code(GameCode *game_code) {
     game_code->is_valid = false;
 }
 
-internal bool
-get_executable_directory(char *buffer, u64 buffer_size) {
+internal bool get_executable_directory(char *buffer, u64 buffer_size) {
     assert(buffer != nullptr, "Executable path buffer must not be null!");
     assert(buffer_size > 0, "Executable path buffer must not be empty!");
 
@@ -97,8 +101,7 @@ get_executable_directory(char *buffer, u64 buffer_size) {
     return true;
 }
 
-internal bool
-build_game_library_path(char *buffer, u64 buffer_size) {
+internal bool build_game_library_path(char *buffer, u64 buffer_size) {
     assert(buffer != nullptr, "Game path buffer must not be null!");
 
     char executable_directory[4096] = {};
@@ -109,26 +112,17 @@ build_game_library_path(char *buffer, u64 buffer_size) {
         return false;
     }
 
-#if OS_MAC
-    char const *library_name = "libgame.dylib";
-#elif OS_LINUX
-    char const *library_name = "libgame.so";
-#else
-    char const *library_name = "libgame";
-#endif
-
     int written = snprintf(
         buffer,
         buffer_size,
         "%s/%s",
         executable_directory,
-        library_name
+        DYNLIB("game")
     );
     return (written > 0) && ((u64)written < buffer_size);
 }
 
-internal bool
-load_game_code(GameCode *game_code) {
+internal bool load_game_code(GameCode *game_code) {
     assert(game_code != nullptr, "Game code must not be null!");
 
     char library_path[4096] = {};
@@ -166,30 +160,7 @@ load_game_code(GameCode *game_code) {
     return true;
 }
 
-internal void
-cleanup(void) {
-    unload_game_code(&global_game_code);
-
-    if(global_renderer_initialized) {
-        cleanup_vulkan();
-        global_renderer_initialized = false;
-    }
-
-    if(global_window != nullptr) {
-        glfwDestroyWindow(global_window);
-        global_window = nullptr;
-    }
-
-    if(global_glfw_initialized) {
-        glfwTerminate();
-        global_glfw_initialized = false;
-    }
-
-    release_arena(&global_arena);
-}
-
-internal void
-update_input(GLFWwindow *window, GameInput *input) {
+internal void update_input(GLFWwindow *window, GameInput *input) {
     assert(window != nullptr, "Window must not be null!");
     assert(input != nullptr, "Input must not be null!");
 
@@ -199,80 +170,65 @@ update_input(GLFWwindow *window, GameInput *input) {
     input->move_right.ended_down = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
 }
 
-internal u32
-get_lane_count_from_system(void) {
-    long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
-    if(cpu_count < 1) {
-        cpu_count = 1;
-    }
-    if(cpu_count > MAX_LANES) {
-        cpu_count = MAX_LANES;
-    }
-
-    return (u32)cpu_count;
-}
-
-internal bool
-init_frame_dispatch(FrameDispatch *dispatch) {
+internal bool init_frame_dispatch(FrameDispatch *dispatch) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
 
     *dispatch = {};
-    if(pthread_mutex_init(&dispatch->mutex, nullptr) != 0) {
+    if(!init_thread_mutex(&dispatch->mutex)) {
         return false;
     }
-    if(pthread_cond_init(&dispatch->cond, nullptr) != 0) {
-        pthread_mutex_destroy(&dispatch->mutex);
+    if(!init_thread_condition_variable(&dispatch->cond)) {
+        destroy_thread_mutex(&dispatch->mutex);
         return false;
     }
 
     return true;
 }
 
-internal void
-destroy_frame_dispatch(FrameDispatch *dispatch) {
+internal void destroy_frame_dispatch(FrameDispatch *dispatch) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
-    pthread_cond_destroy(&dispatch->cond);
-    pthread_mutex_destroy(&dispatch->mutex);
+    destroy_thread_condition_variable(&dispatch->cond);
+    destroy_thread_mutex(&dispatch->mutex);
 }
 
-internal void
-signal_frame_start(FrameDispatch *dispatch) {
+internal void signal_frame_start(FrameDispatch *dispatch) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
 
-    pthread_mutex_lock(&dispatch->mutex);
+    lock_thread_mutex(&dispatch->mutex);
     ++dispatch->frame_index;
-    pthread_cond_broadcast(&dispatch->cond);
-    pthread_mutex_unlock(&dispatch->mutex);
+    wake_all_thread_condition_variable(&dispatch->cond);
+    unlock_thread_mutex(&dispatch->mutex);
 }
 
-internal void
-signal_shutdown(FrameDispatch *dispatch) {
+internal void signal_shutdown(FrameDispatch *dispatch) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
 
-    pthread_mutex_lock(&dispatch->mutex);
+    lock_thread_mutex(&dispatch->mutex);
     dispatch->shutdown = true;
-    pthread_cond_broadcast(&dispatch->cond);
-    pthread_mutex_unlock(&dispatch->mutex);
+    wake_all_thread_condition_variable(&dispatch->cond);
+    unlock_thread_mutex(&dispatch->mutex);
 }
 
-internal bool
-wait_for_frame_start(FrameDispatch *dispatch, u64 *frame_index) {
+internal bool wait_for_frame_start(FrameDispatch *dispatch, u64 *frame_index) {
     assert(dispatch != nullptr, "Frame dispatch must not be null!");
     assert(frame_index != nullptr, "Frame index must not be null!");
 
-    pthread_mutex_lock(&dispatch->mutex);
+    lock_thread_mutex(&dispatch->mutex);
     while(!dispatch->shutdown && *frame_index == dispatch->frame_index) {
-        pthread_cond_wait(&dispatch->cond, &dispatch->mutex);
+        wait_thread_condition_variable(&dispatch->cond, &dispatch->mutex);
     }
 
     bool should_run = !dispatch->shutdown;
     *frame_index = dispatch->frame_index;
-    pthread_mutex_unlock(&dispatch->mutex);
+    unlock_thread_mutex(&dispatch->mutex);
     return should_run;
 }
 
-internal void
-init_render_commands(Arena *arena, RenderCommands *commands, u32 lane_count) {
+internal void init_render_commands(
+    Arena *arena,
+    RenderCommands *commands,
+    u32 lane_count
+) {
     assert(arena != nullptr, "Arena must not be null!");
     assert(commands != nullptr, "Render commands must not be null!");
     assert(lane_count > 0, "Lane count must be non-zero!");
@@ -290,7 +246,7 @@ init_render_commands(Arena *arena, RenderCommands *commands, u32 lane_count) {
     }
 }
 
-internal void *
+internal ThreadProcResult THREAD_PROC_CALL
 game_worker_thread(void *raw_params) {
     WorkerThreadParams *params = (WorkerThreadParams *)raw_params;
     set_lane_context(&params->lane_context);
@@ -305,39 +261,37 @@ game_worker_thread(void *raw_params) {
         render_group_to_output(params->game_memory->render_commands);
     }
 
-    return nullptr;
+    return THREAD_PROC_SUCCESS;
 }
 
-int
-main(void) {
+int main(void) {
     int result = 0;
     char const *description = nullptr;
     f64 last_counter = 0.0;
-    u32 lane_count = get_lane_count_from_system();
+    u32 lane_count = clamp(get_logical_processor_count(), 1U, MAX_LANES);
     LaneBarrier frame_barrier = {};
     LaneContext main_lane_context = {};
     GameFrameContext main_game_frame_context = {};
     FrameDispatch frame_dispatch = {};
     bool frame_dispatch_initialized = false;
-    pthread_t worker_threads[MAX_LANES] = {};
+    Thread worker_threads[MAX_LANES] = {};
     WorkerThreadParams worker_params[MAX_LANES] = {};
     u32 worker_thread_count = 0;
     GameInput input = {};
+    Arena arena = {};
+    GLFWwindow *window = nullptr;
+    bool glfw_initialized = false;
+    bool renderer_initialized = false;
+    GameCode game_code = {};
+    GameMemory game_memory = {};
 
-    global_arena = create_arena();
-    global_game_memory.permanent_storage_size = PERMANENT_STORAGE_SIZE;
-    global_game_memory.permanent_storage =
-        push_size(&global_arena, PERMANENT_STORAGE_SIZE);
-    global_game_memory.transient_storage_size = TRANSIENT_STORAGE_SIZE;
-    global_game_memory.transient_storage =
-        push_size(&global_arena, TRANSIENT_STORAGE_SIZE);
-    global_game_memory.render_commands =
-        push_struct(&global_arena, RenderCommands);
-    init_render_commands(
-        &global_arena,
-        global_game_memory.render_commands,
-        lane_count
-    );
+    arena = create_arena();
+    game_memory.permanent_storage_size = PERMANENT_STORAGE_SIZE;
+    game_memory.permanent_storage = push_size(&arena, PERMANENT_STORAGE_SIZE);
+    game_memory.transient_storage_size = TRANSIENT_STORAGE_SIZE;
+    game_memory.transient_storage = push_size(&arena, TRANSIENT_STORAGE_SIZE);
+    game_memory.render_commands = push_struct(&arena, RenderCommands);
+    init_render_commands(&arena, game_memory.render_commands, lane_count);
 
     init_lane_barrier(&frame_barrier, lane_count);
     main_lane_context.lane_idx = 0;
@@ -349,47 +303,47 @@ main(void) {
     if(!init_frame_dispatch(&frame_dispatch)) {
         LOG_FATAL("Failed to initialize frame dispatch.");
         result = -1;
-        goto cleanup_label;
+        goto cleanup;
     }
     frame_dispatch_initialized = true;
 
     if(!glfwInit()) {
         LOG_FATAL("glfwInit failed");
         result = -1;
-        goto cleanup_label;
+        goto cleanup;
     }
-    global_glfw_initialized = true;
+    glfw_initialized = true;
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    global_window = glfwCreateWindow(
+    window = glfwCreateWindow(
         WINDOW_WIDTH,
         WINDOW_HEIGHT,
         "The Game",
         nullptr,
         nullptr
     );
-    if(global_window == nullptr) {
+    if(window == nullptr) {
         glfwGetError(&description);
         LOG_FATAL(
             "glfwCreateWindow failed: %s",
             description != nullptr ? description : "Unknown error"
         );
         result = -1;
-        goto cleanup_label;
+        goto cleanup;
     }
 
-    if(!load_game_code(&global_game_code)) {
+    if(!load_game_code(&game_code)) {
         result = -1;
-        goto cleanup_label;
+        goto cleanup;
     }
 
-    if(!init_vulkan(&global_arena, global_window, lane_count)) {
+    if(!init_vulkan(&arena, window, lane_count)) {
         result = -1;
-        goto cleanup_label;
+        goto cleanup;
     }
-    global_renderer_initialized = true;
+    renderer_initialized = true;
 
     for(u32 lane_index = 1; lane_index < lane_count; ++lane_index) {
         WorkerThreadParams *params = worker_params + lane_index;
@@ -397,68 +351,69 @@ main(void) {
         params->lane_context.lane_count = lane_count;
         params->lane_context.barrier = &frame_barrier;
         params->game_frame_context.lane = &params->lane_context;
-        params->game_code = &global_game_code;
-        params->game_memory = &global_game_memory;
+        params->game_code = &game_code;
+        params->game_memory = &game_memory;
         params->input = &input;
         params->dispatch = &frame_dispatch;
 
-        if(pthread_create(
+        if(!create_thread(
                worker_threads + lane_index,
-               nullptr,
                game_worker_thread,
                params
-           ) != 0) {
+           )) {
             LOG_FATAL("Failed to create worker thread %u.", lane_index);
             result = -1;
-            goto cleanup_label;
+            goto cleanup;
         }
 
         ++worker_thread_count;
     }
 
     last_counter = glfwGetTime();
-    while(!glfwWindowShouldClose(global_window)) {
+    while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         f64 current_counter = glfwGetTime();
         input = {};
         input.dt_for_frame = (f32)(current_counter - last_counter);
         last_counter = current_counter;
-        update_input(global_window, &input);
+        update_input(window, &input);
 
         if(!begin_frame()) {
             result = -1;
             break;
         }
 
-        RenderCommands *commands = global_game_memory.render_commands;
+        RenderCommands *commands = game_memory.render_commands;
         reset_render_commands(commands);
         commands->screen_width = vk_state.swapchain_extent.width;
         commands->screen_height = vk_state.swapchain_extent.height;
 
         signal_frame_start(&frame_dispatch);
 
-        global_game_code.update_and_render(
-            &global_game_memory,
-            &input,
-            &main_game_frame_context
-        );
+        game_code
+            .update_and_render(&game_memory, &input, &main_game_frame_context);
         if(!render_group_to_output(commands)) {
             result = -1;
             break;
         }
     }
 
-cleanup_label:
-    if(frame_dispatch_initialized) {
+cleanup:
+    if(frame_dispatch_initialized)
         signal_shutdown(&frame_dispatch);
-    }
-    for(u32 lane_index = 1; lane_index <= worker_thread_count; ++lane_index) {
-        pthread_join(worker_threads[lane_index], nullptr);
-    }
-    if(frame_dispatch_initialized) {
+    for(u32 lane_index = 1; lane_index <= worker_thread_count; ++lane_index)
+        join_thread(worker_threads + lane_index);
+    if(frame_dispatch_initialized)
         destroy_frame_dispatch(&frame_dispatch);
-    }
-    cleanup();
+    unload_game_code(&game_code);
+    if(renderer_initialized)
+        cleanup_vulkan();
+    if(window != nullptr)
+        glfwDestroyWindow(window);
+    if(glfw_initialized)
+        glfwTerminate();
+    release_arena(&arena);
+
     return result;
 }

@@ -11,7 +11,7 @@ AlignAfterOpenBracket: BlockIndent
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowAllArgumentsOnNextLine: false
 AllowShortIfStatementsOnASingleLine: Never
-AlwaysBreakAfterReturnType: TopLevelDefinitions
+AlwaysBreakAfterReturnType: None
 AllowShortFunctionsOnASingleLine: None
 PenaltyReturnTypeOnItsOwnLine: 1000
 SpaceBeforeParens: Never

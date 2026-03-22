@@ -23,8 +23,7 @@ struct LaneContext {
 
 global_variable thread_local LaneContext *tl_lane_context = nullptr;
 
-internal void
-init_lane_barrier(LaneBarrier *barrier, u32 thread_count) {
+internal void init_lane_barrier(LaneBarrier *barrier, u32 thread_count) {
     assert(barrier != nullptr, "Lane barrier must not be null!");
     barrier->count = 0;
     barrier->generation = 0;
@@ -32,29 +31,24 @@ init_lane_barrier(LaneBarrier *barrier, u32 thread_count) {
     barrier->shared_u64 = 0;
 }
 
-internal void
-set_lane_context(LaneContext *context) {
+internal void set_lane_context(LaneContext *context) {
     tl_lane_context = context;
 }
 
-internal LaneContext *
-get_lane_context(void) {
+internal LaneContext *get_lane_context(void) {
     assert(tl_lane_context != nullptr, "Lane context must be installed!");
     return tl_lane_context;
 }
 
-internal u32
-lane_idx(void) {
+internal u32 lane_idx(void) {
     return get_lane_context()->lane_idx;
 }
 
-internal u32
-lane_count(void) {
+internal u32 lane_count(void) {
     return get_lane_context()->lane_count;
 }
 
-internal void
-lane_pause(void) {
+internal void lane_pause(void) {
 #if (COMPILER_CLANG || COMPILER_GCC) && defined(__i386__)
     __builtin_ia32_pause();
 #elif (COMPILER_CLANG || COMPILER_GCC) && defined(__x86_64__)
@@ -66,8 +60,7 @@ lane_pause(void) {
 #endif
 }
 
-internal void
-lane_sync(void) {
+internal void lane_sync(void) {
     LaneBarrier *barrier = get_lane_context()->barrier;
     if(barrier->thread_count <= 1) {
         return;
@@ -80,8 +73,16 @@ lane_sync(void) {
         __sync_lock_test_and_set(&barrier->count, 0);
         __sync_add_and_fetch(&barrier->generation, 1);
     } else {
+        u32 spin_count = 0;
         while(barrier->generation == generation) {
-            lane_pause();
+            if(spin_count < 1024) {
+                lane_pause();
+            } else {
+#if !OS_WINDOWS
+                sched_yield();
+#endif
+            }
+            ++spin_count;
         }
         __sync_synchronize();
     }
@@ -92,8 +93,7 @@ struct LaneRange {
     u64 max;
 };
 
-internal LaneRange
-lane_range(u64 count) {
+internal LaneRange lane_range(u64 count) {
     u64 idx = lane_idx();
     u64 total = lane_count();
     u64 per_lane = count / total;
@@ -107,8 +107,7 @@ lane_range(u64 count) {
     return result;
 }
 
-internal void
-lane_sync_u64(u64 *value, u32 source_lane) {
+internal void lane_sync_u64(u64 *value, u32 source_lane) {
     assert(value != nullptr, "Broadcast value must not be null!");
 
     LaneBarrier *barrier = get_lane_context()->barrier;

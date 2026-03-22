@@ -68,13 +68,11 @@
 #define assume(expr) ((void)0)
 #endif
 
-inline bool
-is_pow2(u64 value) {
+inline bool is_pow2(u64 value) {
     return value != 0 && (value & (value - 1)) == 0;
 }
 
-inline bool
-add_u64_overflow(u64 a, u64 b, u64 *out) {
+inline bool add_u64_overflow(u64 a, u64 b, u64 *out) {
 #if COMPILER_CLANG || COMPILER_GCC
     return __builtin_add_overflow(a, b, out);
 #else
@@ -88,8 +86,7 @@ add_u64_overflow(u64 a, u64 b, u64 *out) {
 #endif
 }
 
-inline bool
-mul_u64_overflow(u64 a, u64 b, u64 *out) {
+inline bool mul_u64_overflow(u64 a, u64 b, u64 *out) {
 #if COMPILER_CLANG || COMPILER_GCC
     return __builtin_mul_overflow(a, b, out);
 #else
@@ -103,8 +100,7 @@ mul_u64_overflow(u64 a, u64 b, u64 *out) {
 #endif
 }
 
-inline bool
-align_up_pow2_u64(u64 value, u64 alignment, u64 *out) {
+inline bool align_up_pow2_u64(u64 value, u64 alignment, u64 *out) {
     if(!is_pow2(alignment)) {
         *out = 0;
         return true;
@@ -157,3 +153,17 @@ align_up_pow2_u64(u64 value, u64 alignment, u64 *out) {
 #else
 #define assert(expr, msg) ((void)sizeof((expr) ? true : false))
 #endif
+
+inline u32 clamp(u32 value, u32 min, u32 max) {
+    assert(min <= max, "Clamp range is invalid!");
+
+    u32 result = value;
+    if(result < min) {
+        result = min;
+    }
+    if(result > max) {
+        result = max;
+    }
+
+    return result;
+}
