@@ -9,6 +9,7 @@ struct EditorState {
     Arena* transient_arena;
     TextDocument* document;
     i32 cursor_column;
+    i32 desired_column;
     i32 cursor_row;
     f32 blink_timer;
     bool dirty;
@@ -46,6 +47,20 @@ internal void cursor_from_offset(EditorState* state, u64 offset) {
     state->cursor_column = (i32)pt.col;
 }
 
+internal void set_cursor_from_offset(EditorState* state, u64 offset) {
+    cursor_from_offset(state, offset);
+    state->desired_column = state->cursor_column;
+}
+
+internal void snap_cursor_to_desired_column(EditorState* state) {
+    u64 offset = text_point_to_offset(
+        state->document,
+        (u64)state->cursor_row,
+        (u64)state->desired_column
+    );
+    cursor_from_offset(state, offset);
+}
+
 internal void move_cursor(EditorState* state, EditorInput* input) {
     assert(state != nullptr, "Editor state must not be null!");
     assert(input != nullptr, "Editor input must not be null!");
@@ -75,7 +90,7 @@ internal void move_cursor(EditorState* state, EditorInput* input) {
         }
         u64 offset = cursor_to_offset(state);
         text_insert(state->document, offset, utf8, utf8_len);
-        cursor_from_offset(state, offset + utf8_len);
+        set_cursor_from_offset(state, offset + utf8_len);
         state->dirty = true;
     }
 
@@ -91,7 +106,7 @@ internal void move_cursor(EditorState* state, EditorInput* input) {
                         text_prev_char_boundary(state->document, offset);
                     u64 del_size = offset - del_offset;
                     text_delete(state->document, del_offset, del_size);
-                    cursor_from_offset(state, del_offset);
+                    set_cursor_from_offset(state, del_offset);
                     state->dirty = true;
                 }
             } break;
@@ -100,14 +115,14 @@ internal void move_cursor(EditorState* state, EditorInput* input) {
                 u64 offset = cursor_to_offset(state);
                 u8 newline = '\n';
                 text_insert(state->document, offset, &newline, 1);
-                cursor_from_offset(state, offset + 1);
+                set_cursor_from_offset(state, offset + 1);
                 state->dirty = true;
             } break;
 
             case GLFW_KEY_LEFT: {
                 u64 offset = cursor_to_offset(state);
                 if(offset > 0)
-                    cursor_from_offset(
+                    set_cursor_from_offset(
                         state,
                         text_prev_char_boundary(state->document, offset)
                     );
@@ -117,7 +132,7 @@ internal void move_cursor(EditorState* state, EditorInput* input) {
             case GLFW_KEY_RIGHT: {
                 u64 offset = cursor_to_offset(state);
                 if(offset < text_content_size(state->document))
-                    cursor_from_offset(
+                    set_cursor_from_offset(
                         state,
                         text_next_char_boundary(state->document, offset)
                     );
@@ -125,14 +140,18 @@ internal void move_cursor(EditorState* state, EditorInput* input) {
             } break;
 
             case GLFW_KEY_UP: {
-                if(state->cursor_row > 0)
+                if(state->cursor_row > 0) {
                     --state->cursor_row;
+                    snap_cursor_to_desired_column(state);
+                }
                 moved = true;
             } break;
 
             case GLFW_KEY_DOWN: {
-                if(state->cursor_row < max_rows)
+                if(state->cursor_row < max_rows) {
                     ++state->cursor_row;
+                    snap_cursor_to_desired_column(state);
+                }
                 moved = true;
             } break;
         }
@@ -140,8 +159,13 @@ internal void move_cursor(EditorState* state, EditorInput* input) {
 
     line_count = text_line_count(state->document);
     max_rows = line_count > 0 ? (i32)(line_count - 1) : 0;
-    state->cursor_row = clamp(state->cursor_row, 0, max_rows);
+    i32 clamped_row = clamp(state->cursor_row, 0, max_rows);
+    if(clamped_row != state->cursor_row) {
+        state->cursor_row = clamped_row;
+        snap_cursor_to_desired_column(state);
+    }
     state->cursor_column = clamp(state->cursor_column, 0, 4096);
+    state->desired_column = clamp(state->desired_column, 0, 4096);
 
     if(moved || input->char_input_count > 0 || input->scroll_delta != 0.0f) {
         state->blink_timer = 0.0f;

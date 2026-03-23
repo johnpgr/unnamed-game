@@ -17,15 +17,20 @@
 struct TextSummary {
     u64 bytes;
     u64 lines; // newline count
+    u64 codepoints;
+    u64 tail_codepoints; // codepoints after the last newline
     u64 utf16_units;
 };
 
 internal TextSummary text_summary_add(TextSummary a, TextSummary b) {
-    return {
-        a.bytes + b.bytes,
-        a.lines + b.lines,
-        a.utf16_units + b.utf16_units
-    };
+    TextSummary result = {};
+    result.bytes = a.bytes + b.bytes;
+    result.lines = a.lines + b.lines;
+    result.codepoints = a.codepoints + b.codepoints;
+    result.tail_codepoints =
+        (b.lines > 0) ? b.tail_codepoints : (a.tail_codepoints + b.codepoints);
+    result.utf16_units = a.utf16_units + b.utf16_units;
+    return result;
 }
 
 internal TextSummary text_summary_from_bytes(u8 const* data, u64 len) {
@@ -33,14 +38,19 @@ internal TextSummary text_summary_from_bytes(u8 const* data, u64 len) {
     s.bytes = len;
     for(u64 i = 0; i < len; ++i) {
         u8 b = data[i];
-        if(b == '\n')
-            ++s.lines;
         // Count UTF-16 units: codepoints >= U+10000 need 2 units (4-byte UTF-8
         // start: 0xF0-0xFF)
         if((b & 0xC0) != 0x80) { // not a continuation byte → start of codepoint
+            ++s.codepoints;
             ++s.utf16_units;
             if(b >= 0xF0)
                 ++s.utf16_units; // supplementary plane
+            if(b == '\n') {
+                ++s.lines;
+                s.tail_codepoints = 0;
+            } else {
+                ++s.tail_codepoints;
+            }
         }
     }
     return s;
@@ -210,6 +220,26 @@ internal void text_write_leaf_chunks(
         leaf->summary = text_summary_add(leaf->summary, chunk->summary);
         offset += chunk_size;
     }
+}
+
+internal TextSummary text_document_summary(TextDocument* doc) {
+    if(doc->root)
+        return doc->root->summary;
+    if(doc->first_leaf)
+        return doc->first_leaf->summary;
+    return {};
+}
+
+internal void text_sync_total(TextDocument* doc) {
+    doc->total = text_document_summary(doc);
+}
+
+internal void text_point_advance_by_summary(TextPoint* pt, TextSummary summary) {
+    pt->line += summary.lines;
+    if(summary.lines > 0)
+        pt->col = summary.tail_codepoints;
+    else
+        pt->col += summary.codepoints;
 }
 
 // Recompute leaf summary from its chunks.
@@ -500,12 +530,12 @@ internal void text_insert(
             }
         }
 
-        doc->total =
-            text_summary_add(doc->total, text_summary_from_bytes(p, chunk));
         cursor += chunk;
         p += chunk;
         remaining -= chunk;
     }
+
+    text_sync_total(doc);
 }
 
 // ---- delete helpers ----
@@ -549,6 +579,29 @@ internal bool node_remove_leaf(
     return false;
 }
 
+internal void node_refresh_summary_for_leaf(
+    TextNode* node,
+    u64 leaf_start,
+    TextLeaf* leaf
+) {
+    int child_idx = 0;
+    u64 local_offset = leaf_start;
+    for(; child_idx < node->count - 1; ++child_idx) {
+        if(local_offset < node->child_summaries[child_idx].bytes)
+            break;
+        local_offset -= node->child_summaries[child_idx].bytes;
+    }
+
+    if(node->height == 1) {
+        assert(node->leaves[child_idx] == leaf, "leaf path refresh mismatch");
+        node->child_summaries[child_idx] = leaf->summary;
+    } else {
+        node_refresh_summary_for_leaf(node->nodes[child_idx], local_offset, leaf);
+        node->child_summaries[child_idx] = node->nodes[child_idx]->summary;
+    }
+    node_recompute_summary(node);
+}
+
 // ---- find leaf by byte offset (tree descent) ----
 
 struct TextLeafPos {
@@ -581,7 +634,14 @@ internal TextLeafPos text_find_leaf(TextDocument* doc, u64 byte_offset) {
     return {node->leaves[i], accumulated};
 }
 
-internal u8 text_byte_at(TextDocument* doc, u64 byte_offset) {
+struct TextByteLocation {
+    TextLeaf* leaf;
+    u16 chunk_index;
+    u16 byte_index;
+};
+
+internal TextByteLocation
+text_resolve_byte_location(TextDocument* doc, u64 byte_offset) {
     assert(byte_offset < doc->total.bytes, "byte offset out of range");
 
     TextLeafPos lp = text_find_leaf(doc, byte_offset);
@@ -591,22 +651,33 @@ internal u8 text_byte_at(TextDocument* doc, u64 byte_offset) {
     for(int chunk_index = 0; chunk_index < lp.leaf->count; ++chunk_index) {
         TextChunk* chunk = &lp.leaf->chunks[chunk_index];
         if(local_offset < accumulated + chunk->len) {
-            return chunk->text[local_offset - accumulated];
+            return {
+                lp.leaf,
+                (u16)chunk_index,
+                (u16)(local_offset - accumulated)
+            };
         }
         accumulated += chunk->len;
     }
 
     assert(false, "failed to resolve byte within leaf");
-    return 0;
+    return {};
 }
 
 internal u64 text_prev_char_boundary(TextDocument* doc, u64 byte_offset) {
     if(byte_offset == 0)
         return 0;
 
+    TextByteLocation location =
+        text_resolve_byte_location(doc, byte_offset - 1);
+    TextChunk* chunk = &location.leaf->chunks[location.chunk_index];
+
     u64 result = byte_offset - 1;
-    while(result > 0 && utf8_is_continuation(text_byte_at(doc, result)))
+    while(result > 0 && location.byte_index > 0 &&
+          utf8_is_continuation(chunk->text[location.byte_index])) {
+        --location.byte_index;
         --result;
+    }
     return result;
 }
 
@@ -614,9 +685,14 @@ internal u64 text_next_char_boundary(TextDocument* doc, u64 byte_offset) {
     if(byte_offset >= doc->total.bytes)
         return doc->total.bytes;
 
+    TextByteLocation location = text_resolve_byte_location(doc, byte_offset);
+    TextChunk* chunk = &location.leaf->chunks[location.chunk_index];
+
     u64 result = byte_offset + 1;
-    while(result < doc->total.bytes &&
-          utf8_is_continuation(text_byte_at(doc, result))) {
+    u16 byte_index = location.byte_index + 1;
+    while(result < doc->total.bytes && byte_index < chunk->len &&
+          utf8_is_continuation(chunk->text[byte_index])) {
+        ++byte_index;
         ++result;
     }
     return result;
@@ -673,8 +749,6 @@ internal void text_delete(TextDocument* doc, u64 byte_offset, u64 len) {
     if(len == 0)
         return;
 
-    TextSummary deleted_summary = {};
-
     u64 remaining = len;
     while(remaining > 0) {
         TextLeafPos lp = text_find_leaf(doc, byte_offset);
@@ -683,18 +757,6 @@ internal void text_delete(TextDocument* doc, u64 byte_offset, u64 len) {
         u64 local_start = byte_offset - lp.leaf_start;
         u64 leaf_avail = leaf->summary.bytes - local_start;
         u64 delete_now = remaining < leaf_avail ? remaining : leaf_avail;
-
-        // Record what we're deleting for total summary update
-        u8 tmp[TEXT_TREE_CAP * TEXT_CHUNK_MAX];
-        u64 src = 0;
-        for(int i = 0; i < leaf->count; ++i) {
-            memcpy(tmp + src, leaf->chunks[i].text, leaf->chunks[i].len);
-            src += leaf->chunks[i].len;
-        }
-        deleted_summary = text_summary_add(
-            deleted_summary,
-            text_summary_from_bytes(tmp + local_start, delete_now)
-        );
 
         bool leaf_empty = leaf_delete_range(leaf, local_start, delete_now);
 
@@ -724,20 +786,15 @@ internal void text_delete(TextDocument* doc, u64 byte_offset, u64 len) {
             text_free_leaf(doc, leaf);
             // byte_offset stays the same, content shifted left
         } else {
-            // Update node summaries for this leaf
             if(doc->root)
-                node_recompute_all(doc->root);
-            // If no root, the single-leaf total is already updated via
-            // leaf->summary byte_offset stays the same (we deleted from this
-            // position)
+                node_refresh_summary_for_leaf(doc->root, lp.leaf_start, leaf);
+            // byte_offset stays the same (we deleted from this position)
         }
 
         remaining -= delete_now;
     }
 
-    doc->total.bytes -= deleted_summary.bytes;
-    doc->total.lines -= deleted_summary.lines;
-    doc->total.utf16_units -= deleted_summary.utf16_units;
+    text_sync_total(doc);
 }
 
 // ---- create ----
@@ -765,43 +822,211 @@ internal u64 text_line_count(TextDocument* doc) {
     return doc->total.lines + 1;
 }
 
-// Convert logical byte offset → (line, col)
-internal TextPoint text_offset_to_point(TextDocument* doc, u64 byte_offset) {
-    byte_offset =
-        byte_offset < doc->total.bytes ? byte_offset : doc->total.bytes;
-    TextPoint pt = {};
-    u64 accumulated = 0;
+internal void text_skip_summary(
+    TextSummary summary,
+    u64* line,
+    u64* col,
+    u64* offset
+) {
+    TextPoint pt = {*line, *col};
+    text_point_advance_by_summary(&pt, summary);
+    *line = pt.line;
+    *col = pt.col;
+    *offset += summary.bytes;
+}
 
-    // Walk leaves
-    for(TextLeaf* leaf = doc->first_leaf; leaf; leaf = leaf->next) {
-        if(accumulated + leaf->summary.bytes < byte_offset) {
-            pt.line += leaf->summary.lines;
-            accumulated += leaf->summary.bytes;
+internal bool text_summary_can_skip_for_point(
+    TextSummary summary,
+    u64 target_line,
+    u64 target_col,
+    u64 line,
+    u64 col
+) {
+    if(line + summary.lines < target_line)
+        return true;
+    if(line == target_line && summary.lines == 0 &&
+       col + summary.codepoints <= target_col) {
+        return true;
+    }
+    return false;
+}
+
+internal bool text_point_to_offset_in_leaf(
+    TextLeaf* leaf,
+    u64 target_line,
+    u64 target_col,
+    u64* line,
+    u64* col,
+    u64* offset
+) {
+    if(*line == target_line && *col == target_col)
+        return true;
+
+    for(int chunk_index = 0; chunk_index < leaf->count; ++chunk_index) {
+        TextChunk* chunk = &leaf->chunks[chunk_index];
+        if(text_summary_can_skip_for_point(
+               chunk->summary,
+               target_line,
+               target_col,
+               *line,
+               *col
+           )) {
+            text_skip_summary(chunk->summary, line, col, offset);
             continue;
         }
-        // Within this leaf
-        for(int i = 0; i < leaf->count; ++i) {
-            TextChunk* c = &leaf->chunks[i];
-            if(accumulated + c->len < byte_offset) {
-                pt.line += c->summary.lines;
-                accumulated += c->len;
+
+        for(u16 byte_index = 0; byte_index < chunk->len; ++byte_index) {
+            if(utf8_is_continuation(chunk->text[byte_index])) {
+                ++(*offset);
                 continue;
             }
-            // Within this chunk
-            for(u16 j = 0; j < c->len && accumulated < byte_offset;
-                ++j, ++accumulated) {
-                if(!utf8_is_continuation(c->text[j])) {
-                    if(c->text[j] == '\n') {
-                        ++pt.line;
-                        pt.col = 0;
-                    } else {
-                        ++pt.col;
-                    }
-                }
+
+            if(*line == target_line) {
+                if(*col == target_col)
+                    return true;
+                if(chunk->text[byte_index] == '\n')
+                    return true;
             }
-            return pt;
+
+            if(chunk->text[byte_index] == '\n') {
+                ++(*line);
+                *col = 0;
+            } else {
+                ++(*col);
+            }
+            ++(*offset);
         }
     }
+
+    return false;
+}
+
+internal bool text_point_to_offset_in_node(
+    TextNode* node,
+    u64 target_line,
+    u64 target_col,
+    u64* line,
+    u64* col,
+    u64* offset
+) {
+    if(*line == target_line && *col == target_col)
+        return true;
+
+    for(int child_index = 0; child_index < node->count; ++child_index) {
+        TextSummary summary = node->child_summaries[child_index];
+        if(text_summary_can_skip_for_point(
+               summary,
+               target_line,
+               target_col,
+               *line,
+               *col
+           )) {
+            text_skip_summary(summary, line, col, offset);
+            continue;
+        }
+
+        if(node->height == 1) {
+            if(text_point_to_offset_in_leaf(
+                node->leaves[child_index],
+                target_line,
+                target_col,
+                line,
+                col,
+                offset
+            )) {
+                return true;
+            }
+            continue;
+        }
+        if(text_point_to_offset_in_node(
+               node->nodes[child_index],
+               target_line,
+               target_col,
+               line,
+               col,
+               offset
+           )) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Convert logical byte offset → (line, col)
+internal TextPoint text_offset_to_point(TextDocument* doc, u64 byte_offset) {
+    u64 remaining =
+        byte_offset < doc->total.bytes ? byte_offset : doc->total.bytes;
+    TextPoint pt = {};
+
+    if(doc->root) {
+        TextNode* node = doc->root;
+        while(node->height > 1) {
+            int child_index = 0;
+            for(; child_index < node->count; ++child_index) {
+                TextSummary summary = node->child_summaries[child_index];
+                if(remaining < summary.bytes)
+                    break;
+                text_point_advance_by_summary(&pt, summary);
+                remaining -= summary.bytes;
+            }
+            if(child_index == node->count)
+                return pt;
+            node = node->nodes[child_index];
+        }
+
+        for(int child_index = 0; child_index < node->count; ++child_index) {
+            TextLeaf* leaf = node->leaves[child_index];
+            if(remaining < leaf->summary.bytes) {
+                for(int chunk_index = 0; chunk_index < leaf->count; ++chunk_index) {
+                    TextChunk* chunk = &leaf->chunks[chunk_index];
+                    if(remaining < chunk->len) {
+                        for(u16 byte_index = 0; byte_index < remaining;
+                            ++byte_index) {
+                            if(!utf8_is_continuation(chunk->text[byte_index])) {
+                                if(chunk->text[byte_index] == '\n') {
+                                    ++pt.line;
+                                    pt.col = 0;
+                                } else {
+                                    ++pt.col;
+                                }
+                            }
+                        }
+                        return pt;
+                    }
+                    text_point_advance_by_summary(&pt, chunk->summary);
+                    remaining -= chunk->len;
+                }
+                return pt;
+            }
+            text_point_advance_by_summary(&pt, leaf->summary);
+            remaining -= leaf->summary.bytes;
+        }
+        return pt;
+    }
+
+    TextLeaf* leaf = doc->first_leaf;
+    if(leaf) {
+        for(int chunk_index = 0; chunk_index < leaf->count; ++chunk_index) {
+            TextChunk* chunk = &leaf->chunks[chunk_index];
+            if(remaining < chunk->len) {
+                for(u16 byte_index = 0; byte_index < remaining; ++byte_index) {
+                    if(!utf8_is_continuation(chunk->text[byte_index])) {
+                        if(chunk->text[byte_index] == '\n') {
+                            ++pt.line;
+                            pt.col = 0;
+                        } else {
+                            ++pt.col;
+                        }
+                    }
+                }
+                return pt;
+            }
+            text_point_advance_by_summary(&pt, chunk->summary);
+            remaining -= chunk->len;
+        }
+    }
+
     return pt;
 }
 
@@ -811,42 +1036,26 @@ internal u64 text_point_to_offset(TextDocument* doc, u64 line, u64 col) {
     u64 cur_col = 0;
     u64 offset = 0;
 
-    for(TextLeaf* leaf = doc->first_leaf; leaf; leaf = leaf->next) {
-        if(cur_line + leaf->summary.lines < line) {
-            cur_line += leaf->summary.lines;
-            offset += leaf->summary.bytes;
-            continue;
-        }
-        for(int i = 0; i < leaf->count; ++i) {
-            TextChunk* c = &leaf->chunks[i];
-            if(cur_line + c->summary.lines < line) {
-                cur_line += c->summary.lines;
-                offset += c->len;
-                continue;
-            }
-            for(u16 j = 0; j < c->len; ++j) {
-                if(utf8_is_continuation(c->text[j])) {
-                    ++offset;
-                    continue;
-                }
-
-                if(cur_line == line) {
-                    if(cur_col == col)
-                        return offset;
-                    if(c->text[j] == '\n')
-                        return offset;
-                }
-
-                if(c->text[j] == '\n') {
-                    ++cur_line;
-                    cur_col = 0;
-                } else {
-                    ++cur_col;
-                }
-                ++offset;
-            }
-        }
+    if(doc->root) {
+        text_point_to_offset_in_node(
+            doc->root,
+            line,
+            col,
+            &cur_line,
+            &cur_col,
+            &offset
+        );
+    } else if(doc->first_leaf) {
+        text_point_to_offset_in_leaf(
+            doc->first_leaf,
+            line,
+            col,
+            &cur_line,
+            &cur_col,
+            &offset
+        );
     }
+
     return offset;
 }
 
@@ -854,22 +1063,47 @@ internal u64 text_line_start_offset(TextDocument* doc, u64 line_idx) {
     return text_point_to_offset(doc, line_idx, 0);
 }
 
-internal u64 text_line_end_offset(TextDocument* doc, u64 line_idx) {
-    u64 offset = text_line_start_offset(doc, line_idx);
-    while(offset < doc->total.bytes) {
-        u8 byte = text_byte_at(doc, offset);
-        offset = text_next_char_boundary(doc, offset);
-        if(byte == '\n')
-            break;
+internal u64
+text_line_end_offset_from(TextDocument* doc, u64 start_offset) {
+    if(start_offset >= doc->total.bytes)
+        return doc->total.bytes;
+
+    TextByteLocation location = text_resolve_byte_location(doc, start_offset);
+    TextLeaf* leaf = location.leaf;
+    u64 offset = start_offset;
+
+    for(; leaf; leaf = leaf->next) {
+        int chunk_index = (leaf == location.leaf) ? location.chunk_index : 0;
+        u16 byte_index = (leaf == location.leaf) ? location.byte_index : 0;
+        for(; chunk_index < leaf->count; ++chunk_index) {
+            TextChunk* chunk = &leaf->chunks[chunk_index];
+            if(chunk->summary.lines == 0) {
+                offset += chunk->len - byte_index;
+                byte_index = 0;
+                continue;
+            }
+
+            for(; byte_index < chunk->len; ++byte_index, ++offset) {
+                if(chunk->text[byte_index] == '\n')
+                    return offset + 1;
+            }
+            byte_index = 0;
+        }
     }
+
     return offset;
+}
+
+internal u64 text_line_end_offset(TextDocument* doc, u64 line_idx) {
+    u64 start_offset = text_line_start_offset(doc, line_idx);
+    return text_line_end_offset_from(doc, start_offset);
 }
 
 // Copy one line's content into scratch arena. Returns a String slice.
 internal String
 text_line_content(TextDocument* doc, u64 line_idx, Arena* scratch) {
     u64 start_offset = text_line_start_offset(doc, line_idx);
-    u64 end_offset = text_line_end_offset(doc, line_idx);
+    u64 end_offset = text_line_end_offset_from(doc, start_offset);
     u64 size = end_offset - start_offset;
     if(size == 0)
         return {(u8 const*)"", 0};
@@ -877,31 +1111,21 @@ text_line_content(TextDocument* doc, u64 line_idx, Arena* scratch) {
     u8* buf = push_array(scratch, u8, size + 1);
     u64 written = 0;
 
-    // Walk from start_offset, collect bytes
-    u64 accumulated = 0;
-    for(TextLeaf* leaf = doc->first_leaf; leaf && written < size;
+    TextByteLocation location = text_resolve_byte_location(doc, start_offset);
+    for(TextLeaf* leaf = location.leaf; leaf && written < size;
         leaf = leaf->next) {
-        if(accumulated + leaf->summary.bytes <= start_offset) {
-            accumulated += leaf->summary.bytes;
-            continue;
-        }
-        for(int i = 0; i < leaf->count && written < size; ++i) {
-            TextChunk* c = &leaf->chunks[i];
-            u64 chunk_start = accumulated;
-            u64 chunk_end = accumulated + c->len;
-            if(chunk_end <= start_offset) {
-                accumulated += c->len;
-                continue;
-            }
-            u64 copy_from =
-                start_offset > chunk_start ? start_offset - chunk_start : 0;
-            u64 copy_to = (start_offset + size) < chunk_end
-                              ? (start_offset + size) - chunk_start
-                              : c->len;
-            u64 copy_len = copy_to - copy_from;
-            memcpy(buf + written, c->text + copy_from, copy_len);
+        int chunk_index = (leaf == location.leaf) ? location.chunk_index : 0;
+        u16 byte_index = (leaf == location.leaf) ? location.byte_index : 0;
+
+        for(; chunk_index < leaf->count && written < size; ++chunk_index) {
+            TextChunk* chunk = &leaf->chunks[chunk_index];
+            u64 copy_len = chunk->len - byte_index;
+            u64 remaining = size - written;
+            if(copy_len > remaining)
+                copy_len = remaining;
+            memcpy(buf + written, chunk->text + byte_index, copy_len);
             written += copy_len;
-            accumulated += c->len;
+            byte_index = 0;
         }
     }
 
