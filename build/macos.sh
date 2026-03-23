@@ -111,12 +111,4 @@ VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -Wl,-rpath,"$VULKAN_LIB_DIR" -lvulkan)
   -pthread \
   -o "$BIN_DIR/main"
 
-"$CXX" \
-  "${COMMON_FLAGS[@]}" \
-  "${MODE_FLAGS[@]}" \
-  -dynamiclib \
-  "$ROOT_DIR/src/game/game.cpp" \
-  -o "$BIN_DIR/libgame.dylib"
-
 printf 'built %s/main\n' "$BIN_DIR"
-printf 'built %s/libgame.dylib\n' "$BIN_DIR"

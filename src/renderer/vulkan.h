@@ -1,8 +1,7 @@
 #pragma once
 
-#include "base/lane.h"
-#include "game/game_math.h"
-#include "game/game_render_group.h"
+#include "base/types.h"
+#include "push_cmds.cpp"
 
 #include <vulkan/vulkan.h>
 
@@ -41,10 +40,6 @@ struct VulkanState {
     VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
     VkImageView swapchain_views[MAX_SWAPCHAIN_IMAGES];
 
-    VkCommandPool lane_pools[MAX_LANES];
-    VkCommandBuffer lane_cmds[MAX_LANES];
-    u32 active_lane_count;
-
     VkCommandPool primary_pool;
     VkCommandBuffer primary_cmd;
 
@@ -62,7 +57,7 @@ struct VulkanState {
     PFN_vkCmdEndRenderingKHR cmd_end_rendering;
 };
 
-bool init_vulkan(Arena *arena, GLFWwindow *window, u32 lane_count);
+bool init_vulkan(Arena *arena, GLFWwindow *window);
 void cleanup_vulkan(void);
 bool begin_frame(void);
-bool render_group_to_output(RenderCommands *commands);
+bool render_drain_cmd_buffer(PushCmdBuffer *buffer);

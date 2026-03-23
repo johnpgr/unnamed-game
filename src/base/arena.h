@@ -7,7 +7,9 @@
 
 // 1 Terabyte of virtual address space reservation.
 // Costs nothing in physical RAM until committed.
+#ifndef ARENA_RESERVE_SIZE
 #define ARENA_RESERVE_SIZE (1 * TB)
+#endif
 
 struct Arena {
     u8 *base;

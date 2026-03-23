@@ -108,17 +108,7 @@ VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -lvulkan)
   "$ROOT_DIR/src/main.cpp" \
   "${GLFW_LIBS[@]}" \
   "${VULKAN_LIBS[@]}" \
-  -ldl \
   -pthread \
   -o "$BIN_DIR/main"
 
-"$CXX" \
-  "${COMMON_FLAGS[@]}" \
-  "${MODE_FLAGS[@]}" \
-  -shared \
-  -fPIC \
-  "$ROOT_DIR/src/game/game.cpp" \
-  -o "$BIN_DIR/libgame.so"
-
 printf 'built %s/main\n' "$BIN_DIR"
-printf 'built %s/libgame.so\n' "$BIN_DIR"

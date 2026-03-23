@@ -1016,12 +1016,7 @@ internal bool recreate_swapchain(void) {
     return true;
 }
 
-internal bool create_command_buffers(u32 lane_count) {
-    assert(lane_count > 0, "Lane count must be non-zero!");
-    assert(lane_count <= MAX_LANES, "Lane count exceeds MAX_LANES!");
-
-    vk_state.active_lane_count = lane_count;
-
+internal bool create_command_buffers(void) {
     VkCommandPoolCreateInfo pool_info = {};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -1050,48 +1045,10 @@ internal bool create_command_buffers(u32 lane_count) {
         return false;
     }
 
-    for(u32 lane_index = 0; lane_index < lane_count; ++lane_index) {
-        if(vkCreateCommandPool(
-               vk_state.device,
-               &pool_info,
-               nullptr,
-               &vk_state.lane_pools[lane_index]
-           ) != VK_SUCCESS) {
-            return false;
-        }
-
-        VkCommandBufferAllocateInfo alloc_info = {};
-        alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        alloc_info.commandPool = vk_state.lane_pools[lane_index];
-        alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-        alloc_info.commandBufferCount = 1;
-
-        if(vkAllocateCommandBuffers(
-               vk_state.device,
-               &alloc_info,
-               &vk_state.lane_cmds[lane_index]
-           ) != VK_SUCCESS) {
-            return false;
-        }
-    }
-
     return true;
 }
 
 internal void cleanup_command_buffers(void) {
-    for(u32 lane_index = 0; lane_index < ARRAY_COUNT(vk_state.lane_pools);
-        ++lane_index) {
-        if(vk_state.lane_pools[lane_index] != VK_NULL_HANDLE) {
-            vkDestroyCommandPool(
-                vk_state.device,
-                vk_state.lane_pools[lane_index],
-                nullptr
-            );
-            vk_state.lane_pools[lane_index] = VK_NULL_HANDLE;
-            vk_state.lane_cmds[lane_index] = VK_NULL_HANDLE;
-        }
-    }
-
     if(vk_state.primary_pool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(vk_state.device, vk_state.primary_pool, nullptr);
         vk_state.primary_pool = VK_NULL_HANDLE;
@@ -1099,23 +1056,20 @@ internal void cleanup_command_buffers(void) {
     }
 }
 
-internal vec4 get_clear_color(RenderCommands *commands) {
+internal vec4 get_clear_color(PushCmdBuffer *buffer) {
+    assert(buffer != nullptr, "Push command buffer must not be null!");
+
     vec4 result = vec4(0.04f, 0.05f, 0.08f, 1.0f);
 
-    for(u32 lane_index = 0; lane_index < commands->active_lane_count;
-        ++lane_index) {
-        LanePushBuffer *buffer = commands->lane_buffers + lane_index;
-        for(u32 offset = 0; offset < buffer->used;) {
-            RenderEntryHeader *header =
-                (RenderEntryHeader *)(buffer->base + offset);
-            if(header->type == render_entry_type_clear) {
-                RenderEntryClear *entry = (RenderEntryClear *)header;
-                result = entry->color;
-                return result;
-            }
-
-            offset += header->size;
+    for(u32 offset = 0; offset < buffer->used;) {
+        PushCmd *cmd = (PushCmd *)(buffer->base + offset);
+        if(cmd->type == cmd_type_clear) {
+            CmdClear *clear_cmd = (CmdClear *)cmd;
+            result = clear_cmd->color;
+            break;
         }
+
+        offset += cmd->size;
     }
 
     return result;
@@ -1456,104 +1410,8 @@ bool begin_frame(void) {
     return true;
 }
 
-internal bool vulkan_record_commands(RenderCommands *commands) {
-    assert(commands != nullptr, "Render commands must not be null!");
-
-    if(!vk_state.frame_active || vk_state.fatal_error) {
-        return !vk_state.fatal_error;
-    }
-
-    u32 lane_index = lane_idx();
-    assert(lane_index < vk_state.active_lane_count, "Lane index out of range!");
-
-    if(vkResetCommandPool(
-           vk_state.device,
-           vk_state.lane_pools[lane_index],
-           0
-       ) != VK_SUCCESS) {
-        LOG_ERROR("vkResetCommandPool failed for lane %u.", lane_index);
-        return false;
-    }
-
-    VkCommandBufferInheritanceRenderingInfoKHR rendering_info = {};
-    rendering_info.sType =
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO_KHR;
-    rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachmentFormats = &vk_state.swapchain_format;
-    rendering_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkCommandBufferInheritanceInfo inheritance_info = {};
-    inheritance_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-    inheritance_info.pNext = &rendering_info;
-
-    VkCommandBufferBeginInfo begin_info = {};
-    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
-                       VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-    begin_info.pInheritanceInfo = &inheritance_info;
-
-    if(vkBeginCommandBuffer(vk_state.lane_cmds[lane_index], &begin_info) !=
-       VK_SUCCESS) {
-        LOG_ERROR("vkBeginCommandBuffer failed for lane %u.", lane_index);
-        return false;
-    }
-
-    vkCmdBindPipeline(
-        vk_state.lane_cmds[lane_index],
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        vk_state.sprite_pipeline
-    );
-
-    VkViewport viewport = {};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (f32)vk_state.swapchain_extent.width;
-    viewport.height = (f32)vk_state.swapchain_extent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(vk_state.lane_cmds[lane_index], 0, 1, &viewport);
-
-    VkRect2D scissor = {};
-    scissor.extent = vk_state.swapchain_extent;
-    vkCmdSetScissor(vk_state.lane_cmds[lane_index], 0, 1, &scissor);
-
-    LanePushBuffer *buffer = commands->lane_buffers + lane_index;
-    for(u32 offset = 0; offset < buffer->used;) {
-        RenderEntryHeader *header =
-            (RenderEntryHeader *)(buffer->base + offset);
-        if(header->type == render_entry_type_rect) {
-            RenderEntryRect *entry = (RenderEntryRect *)header;
-            VulkanSpritePushConstants push_constants = {};
-            push_constants.center = entry->p;
-            push_constants.size = vec2(entry->width, entry->height);
-            push_constants.color = entry->color;
-            push_constants.screen_size =
-                vec2((f32)commands->screen_width, (f32)commands->screen_height);
-
-            vkCmdPushConstants(
-                vk_state.lane_cmds[lane_index],
-                vk_state.pipeline_layout,
-                VK_SHADER_STAGE_VERTEX_BIT,
-                0,
-                sizeof(push_constants),
-                &push_constants
-            );
-            vkCmdDraw(vk_state.lane_cmds[lane_index], 6, 1, 0, 0);
-        }
-
-        offset += header->size;
-    }
-
-    if(vkEndCommandBuffer(vk_state.lane_cmds[lane_index]) != VK_SUCCESS) {
-        LOG_ERROR("vkEndCommandBuffer failed for lane %u.", lane_index);
-        return false;
-    }
-
-    return true;
-}
-
-internal bool end_frame(RenderCommands *commands) {
-    assert(commands != nullptr, "Render commands must not be null!");
+bool render_drain_cmd_buffer(PushCmdBuffer *buffer) {
+    assert(buffer != nullptr, "Push command buffer must not be null!");
 
     if(!vk_state.frame_active || vk_state.fatal_error) {
         return !vk_state.fatal_error;
@@ -1584,7 +1442,7 @@ internal bool end_frame(RenderCommands *commands) {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
     );
 
-    vec4 clear_color = get_clear_color(commands);
+    vec4 clear_color = get_clear_color(buffer);
     VkClearValue clear_value = {};
     clear_value.color.float32[0] = clear_color.r;
     clear_value.color.float32[1] = clear_color.g;
@@ -1602,19 +1460,61 @@ internal bool end_frame(RenderCommands *commands) {
 
     VkRenderingInfoKHR rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
-    rendering_info.flags =
-        VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT_KHR;
     rendering_info.renderArea.extent = vk_state.swapchain_extent;
     rendering_info.layerCount = 1;
     rendering_info.colorAttachmentCount = 1;
     rendering_info.pColorAttachments = &color_attachment;
 
     vk_state.cmd_begin_rendering(vk_state.primary_cmd, &rendering_info);
-    vkCmdExecuteCommands(
+
+    vkCmdBindPipeline(
         vk_state.primary_cmd,
-        vk_state.active_lane_count,
-        vk_state.lane_cmds
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vk_state.sprite_pipeline
     );
+
+    VkViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (f32)vk_state.swapchain_extent.width;
+    viewport.height = (f32)vk_state.swapchain_extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(vk_state.primary_cmd, 0, 1, &viewport);
+
+    VkRect2D scissor = {};
+    scissor.extent = vk_state.swapchain_extent;
+    vkCmdSetScissor(vk_state.primary_cmd, 0, 1, &scissor);
+
+    vec2 screen_size = vec2(
+        (f32)vk_state.swapchain_extent.width,
+        (f32)vk_state.swapchain_extent.height
+    );
+
+    for(u32 offset = 0; offset < buffer->used;) {
+        PushCmd *cmd = (PushCmd *)(buffer->base + offset);
+        if(cmd->type == cmd_type_rect) {
+            CmdRect *rect_cmd = (CmdRect *)cmd;
+            VulkanSpritePushConstants push_constants = {};
+            push_constants.center = rect_cmd->center;
+            push_constants.size = rect_cmd->size;
+            push_constants.color = rect_cmd->color;
+            push_constants.screen_size = screen_size;
+
+            vkCmdPushConstants(
+                vk_state.primary_cmd,
+                vk_state.pipeline_layout,
+                VK_SHADER_STAGE_VERTEX_BIT,
+                0,
+                sizeof(push_constants),
+                &push_constants
+            );
+            vkCmdDraw(vk_state.primary_cmd, 6, 1, 0, 0);
+        }
+
+        offset += cmd->size;
+    }
+
     vk_state.cmd_end_rendering(vk_state.primary_cmd);
 
     transition_swapchain_image(
@@ -1680,30 +1580,6 @@ internal bool end_frame(RenderCommands *commands) {
     return true;
 }
 
-bool render_group_to_output(RenderCommands *commands) {
-    assert(commands != nullptr, "Render commands must not be null!");
-
-    bool result = true;
-    if(!vk_state.fatal_error) {
-        result = vulkan_record_commands(commands);
-        if(!result) {
-            vk_state.fatal_error = true;
-        }
-    }
-
-    lane_sync();
-
-    if(lane_idx() == 0 && !vk_state.fatal_error) {
-        result = end_frame(commands);
-        if(!result) {
-            vk_state.fatal_error = true;
-        }
-    }
-
-    lane_sync();
-    return !vk_state.fatal_error;
-}
-
 void cleanup_vulkan(void) {
     if(vk_state.device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(vk_state.device);
@@ -1746,11 +1622,9 @@ void cleanup_vulkan(void) {
     vk_state = {};
 }
 
-bool init_vulkan(Arena *arena, GLFWwindow *window, u32 lane_count) {
+bool init_vulkan(Arena *arena, GLFWwindow *window) {
     assert(arena != nullptr, "Vulkan arena must not be null!");
     assert(window != nullptr, "Vulkan window must not be null!");
-    assert(lane_count > 0, "Lane count must be non-zero!");
-    assert(lane_count <= MAX_LANES, "Lane count exceeds MAX_LANES!");
 
     bool result = false;
     if(vk_state.initialized) {
@@ -1759,7 +1633,6 @@ bool init_vulkan(Arena *arena, GLFWwindow *window, u32 lane_count) {
 
     vk_state.arena = arena;
     vk_state.window = window;
-    vk_state.active_lane_count = lane_count;
 
     TemporaryMemory temporary_memory = begin_temporary_memory(arena);
     char const *layers[1] = {};
@@ -1870,7 +1743,7 @@ bool init_vulkan(Arena *arena, GLFWwindow *window, u32 lane_count) {
         goto cleanup;
     }
 
-    if(!create_command_buffers(lane_count)) {
+    if(!create_command_buffers()) {
         LOG_FATAL("Failed to create Vulkan command buffers.");
         goto cleanup;
     }

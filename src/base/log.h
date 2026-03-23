@@ -3,7 +3,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-#include "base/typedef.h"
+#include "base/types.h"
 
 enum LogLevel : u8 {
     LOG_LEVEL_FATAL = 0,
