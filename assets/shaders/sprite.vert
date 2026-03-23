@@ -22,7 +22,7 @@ void main() {
     vec2 pixel = pc.center + (offsets[gl_VertexIndex] * pc.size);
     vec2 clip = vec2(
         (2.0 * pixel.x / pc.screen_size.x) - 1.0,
-        1.0 - (2.0 * pixel.y / pc.screen_size.y)
+        (2.0 * pixel.y / pc.screen_size.y) - 1.0
     );
 
     gl_Position = vec4(clip, 0.0, 1.0);
