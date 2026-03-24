@@ -1,7 +1,6 @@
 #include "base/base_mod.h"
 
-#if OS_WINDOWS
-#include "base/threads/threads_win32.cpp"
-#else
-#include "base/threads/threads_posix.cpp"
-#endif
+#include "base/base_log.cpp"
+#include "base/base_memory.cpp"
+#include "base/base_arena.cpp"
+#include "base/base_string.cpp"

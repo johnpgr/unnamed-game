@@ -1,10 +1,7 @@
-#pragma once
+#include <errno.h>
+#include <string.h>
 
-#include <cerrno>
-#include <cstdlib>
-#include <cstring>
-
-#include "base/core.h"
+#include "base/base_memory.h"
 
 #if OS_WINDOWS
 #include <windows.h>
@@ -14,7 +11,7 @@
 #include <unistd.h>
 #endif
 
-inline void fatal_system_call(char const* operation) {
+internal void fatal_system_call(char const* operation) {
     ASSERT(operation != nullptr, "Operation name must not be null!");
 
 #if OS_WINDOWS
@@ -36,7 +33,7 @@ inline void fatal_system_call(char const* operation) {
     abort();
 }
 
-inline void* reserve_system_memory(u64 size) {
+void* reserve_system_memory(u64 size) {
 #if OS_WINDOWS
     void* ptr = VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_NOACCESS);
     if(ptr == nullptr) {
@@ -59,7 +56,7 @@ inline void* reserve_system_memory(u64 size) {
 #endif
 }
 
-inline u64 get_system_page_size(void) {
+u64 get_system_page_size(void) {
 #if OS_WINDOWS
     SYSTEM_INFO system_info = {};
     GetSystemInfo(&system_info);
@@ -74,7 +71,7 @@ inline u64 get_system_page_size(void) {
 #endif
 }
 
-inline void commit_system_memory(void* ptr, u64 size) {
+void commit_system_memory(void* ptr, u64 size) {
     if(size == 0) {
         return;
     }
@@ -91,7 +88,7 @@ inline void commit_system_memory(void* ptr, u64 size) {
 #endif
 }
 
-inline void decommit_system_memory(void* ptr, u64 size) {
+void decommit_system_memory(void* ptr, u64 size) {
     if(size == 0) {
         return;
     }
@@ -110,7 +107,7 @@ inline void decommit_system_memory(void* ptr, u64 size) {
 #endif
 }
 
-inline void release_system_memory(void* ptr, u64 size) {
+void release_system_memory(void* ptr, u64 size) {
 #if OS_WINDOWS
     (void)size;
     if(ptr == nullptr) {

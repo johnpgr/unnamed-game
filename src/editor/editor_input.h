@@ -1,6 +1,6 @@
 #pragma once
 
-#include "base/core.h"
+#include "base/base_core.h"
 
 struct RGFW_window;
 

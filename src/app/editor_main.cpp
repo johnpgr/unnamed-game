@@ -1,5 +1,6 @@
 // [h]
 #include "base/base_mod.h"
+#include "os/os_mod.h"
 
 #define RGFW_VULKAN
 #define RGFW_IMPORT
@@ -19,6 +20,7 @@
 
 // [cpp]
 #include "base/base_mod.cpp"
+#include "os/os_mod.cpp"
 #include "editor/editor_mod.cpp"
 #include "render/render_mod.cpp"
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "base/arena.h"
-#include "base/string.h"
+#include "base/base_arena.h"
+#include "base/base_string.h"
 
 struct TextDocument;
 

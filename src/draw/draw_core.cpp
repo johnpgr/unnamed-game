@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "draw/draw_core.h"
 
 PushCmdBuffer create_push_cmd_buffer(Arena* arena, u32 capacity) {

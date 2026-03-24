@@ -1,6 +1,6 @@
 #pragma once
 
-#include "base/core.h"
+#include "base/base_core.h"
 
 #if OS_WINDOWS
 #ifndef NOMINMAX
@@ -46,26 +46,26 @@ struct ThreadConditionVariable {
 
 typedef ThreadProcResult THREAD_PROC_CALL ThreadProc(void* data);
 
-internal bool init_thread_mutex(ThreadMutex* mutex);
-internal void destroy_thread_mutex(ThreadMutex* mutex);
-internal void lock_thread_mutex(ThreadMutex* mutex);
-internal void unlock_thread_mutex(ThreadMutex* mutex);
+bool init_thread_mutex(ThreadMutex* mutex);
+void destroy_thread_mutex(ThreadMutex* mutex);
+void lock_thread_mutex(ThreadMutex* mutex);
+void unlock_thread_mutex(ThreadMutex* mutex);
 
-internal bool init_thread_condition_variable(
+bool init_thread_condition_variable(
     ThreadConditionVariable* condition_variable
 );
-internal void destroy_thread_condition_variable(
+void destroy_thread_condition_variable(
     ThreadConditionVariable* condition_variable
 );
-internal void wake_all_thread_condition_variable(
+void wake_all_thread_condition_variable(
     ThreadConditionVariable* condition_variable
 );
-internal void wait_thread_condition_variable(
+void wait_thread_condition_variable(
     ThreadConditionVariable* condition_variable,
     ThreadMutex* mutex
 );
 
-internal bool create_thread(Thread* thread, ThreadProc* proc, void* data);
-internal void join_thread(Thread* thread);
+bool create_thread(Thread* thread, ThreadProc* proc, void* data);
+void join_thread(Thread* thread);
 
-internal u32 get_logical_processor_count(void);
+u32 get_logical_processor_count(void);

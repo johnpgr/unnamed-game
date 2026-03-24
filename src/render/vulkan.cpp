@@ -6,11 +6,11 @@
 #undef RGFW_IMPORT
 #undef RGFW_VULKAN
 
-#include "base/arena.h"
-#include "base/log.h"
+#include "base/base_arena.h"
+#include "base/base_log.h"
 
-#include <cstdio>
-#include <cstring>
+#include <stdio.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 
 #define MAX_SWAPCHAIN_IMAGES 4

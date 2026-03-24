@@ -29,8 +29,13 @@ if "%ERRORLEVEL%"=="0" (
 )
 
 for %%f in (
+  "%ROOT_DIR%\src\base\base_arena.cpp"
+  "%ROOT_DIR%\src\base\base_log.cpp"
+  "%ROOT_DIR%\src\base\base_memory.cpp"
   "%ROOT_DIR%\src\base\base_mod.cpp"
-  "%ROOT_DIR%\src\base\threads\threads_win32.cpp"
+  "%ROOT_DIR%\src\base\base_string.cpp"
+  "%ROOT_DIR%\src\os\os_mod.cpp"
+  "%ROOT_DIR%\src\os\os_threads_win32.cpp"
   "%ROOT_DIR%\src\draw\draw_core.cpp"
   "%ROOT_DIR%\src\draw\draw_mod.cpp"
   "%ROOT_DIR%\src\editor\editor_core.cpp"
@@ -46,15 +51,15 @@ for %%f in (
 )
 
 for %%f in (
-  "%ROOT_DIR%\src\base\arena.h"
+  "%ROOT_DIR%\src\base\base_arena.h"
   "%ROOT_DIR%\src\base\base_mod.h"
-  "%ROOT_DIR%\src\base\core.h"
-  "%ROOT_DIR%\src\base\list.h"
-  "%ROOT_DIR%\src\base\log.h"
-  "%ROOT_DIR%\src\base\memory.h"
-  "%ROOT_DIR%\src\base\string.h"
-  "%ROOT_DIR%\src\base\threads\threads.h"
-  "%ROOT_DIR%\src\base\types.h"
+  "%ROOT_DIR%\src\base\base_core.h"
+  "%ROOT_DIR%\src\base\base_list.h"
+  "%ROOT_DIR%\src\base\base_log.h"
+  "%ROOT_DIR%\src\base\base_memory.h"
+  "%ROOT_DIR%\src\base\base_string.h"
+  "%ROOT_DIR%\src\base\base_threads.h"
+  "%ROOT_DIR%\src\base\base_types.h"
   "%ROOT_DIR%\src\draw\draw_core.h"
   "%ROOT_DIR%\src\draw\draw_mod.h"
   "%ROOT_DIR%\src\editor\editor_core.h"
@@ -64,6 +69,7 @@ for %%f in (
   "%ROOT_DIR%\src\render\vulkan.h"
   "%ROOT_DIR%\src\text\text_buffer.h"
   "%ROOT_DIR%\src\text\text_mod.h"
+  "%ROOT_DIR%\src\os\os_mod.h"
   "%ROOT_DIR%\src\third_party\rgfw\RGFW.h"
 ) do (
   cl %COMMON_FLAGS% %MODE_FLAGS% /Zs /TP "%%~f" || exit /b 1
