@@ -160,6 +160,7 @@ collect_sources() {
   done < <(
     find "$ROOT_DIR/src" -type f -name '*.cpp' \
       ! -path "$ROOT_DIR/src/app/*_main.cpp" \
+      ! -path "$ROOT_DIR/src/os/os_memory_win32.cpp" \
       ! -path "$ROOT_DIR/src/os/os_threads_win32.cpp" \
       | sort
   )

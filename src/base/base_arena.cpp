@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "base/base_arena.h"
+#include "os/os_mod.h"
 
 internal u64 align_up(u64 value, u64 alignment) {
     ASSERT(alignment != 0, "alignment must be non-zero");

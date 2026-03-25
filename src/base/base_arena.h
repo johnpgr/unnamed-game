@@ -2,7 +2,6 @@
 
 #include "base/base_core.h"
 #include "base/base_list.h"
-#include "base/base_memory.h"
 
 // Arena header lives in the first 128 bytes of each reserved block.
 // The rest of the block is usable memory.
