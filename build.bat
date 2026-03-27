@@ -15,17 +15,24 @@ if "%~1"=="release" if "%~2"=="" set editor=1
 set root_dir=%cd%
 set bin_dir=%root_dir%\bin
 set src_dir=%root_dir%\src
+set bin_dir_fwd=%bin_dir:\=/%
 if not exist "%bin_dir%" mkdir "%bin_dir%"
 
 :: --- Compile/Link Line Definitions -------------------------------------------
-set common=/std:c++14 /nologo /W4 /WX /wd4505 /wd4127 /I"%src_dir%" /DASSET_DIR=\"%bin_dir%\"
+set vendor_dir=%root_dir%\vendor
+set vulkan_dir=%vendor_dir%\vulkan
+set glfw_dir=%vendor_dir%\glfw
+set common=/std:c++14 /nologo /W4 /WX /wd4505 /wd4127 /wd4201 /wd4996 /I"%src_dir%" /I"%vulkan_dir%\Include" /I"%glfw_dir%\include" /DASSET_DIR=\"%bin_dir_fwd%\"
 if "%debug%"=="1"   set compile=cl %common% /Od /Zi
 if "%release%"=="1" set compile=cl %common% /O2 /DNDEBUG
-set link=/link /MANIFEST:EMBED /INCREMENTAL:NO vulkan-1.lib glfw3.lib
+set libs=/LIBPATH:"%vulkan_dir%\Lib" /LIBPATH:"%glfw_dir%\lib" vulkan-1.lib glfw3_mt.lib user32.lib gdi32.lib shell32.lib
 
 :: --- Shaders -----------------------------------------------------------------
+:: Compile shaders if forced or if .spv files are missing
+if not exist "%bin_dir%\shaders" mkdir "%bin_dir%\shaders"
+if not exist "%bin_dir%\shaders\sprite.vert.spv" set shaders=1
+if not exist "%bin_dir%\shaders\sprite.frag.spv" set shaders=1
 if "%shaders%"=="1" (
-  if not exist "%bin_dir%\shaders" mkdir "%bin_dir%\shaders"
   where glslangValidator >nul 2>nul
   if "!ERRORLEVEL!"=="0" (
     glslangValidator -V "%root_dir%\assets\shaders\sprite.vert" -o "%bin_dir%\shaders\sprite.vert.spv" || exit /b 1
@@ -40,7 +47,10 @@ if "%shaders%"=="1" (
 
 :: --- Build Targets -----------------------------------------------------------
 pushd "%bin_dir%"
-if "%editor%"=="1" set didbuild=1 && %compile% "%src_dir%\app\editor_main.cpp" %link% /out:"%bin_dir%\main.exe" || exit /b 1
+if "%editor%"=="1" (
+  set didbuild=1
+  %compile% "%src_dir%\app\editor_main.cpp" /link %libs% /out:"%bin_dir%\main.exe" || exit /b 1
+)
 popd
 
 :: --- Warn On No Builds -------------------------------------------------------

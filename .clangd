@@ -3,7 +3,6 @@ If:
 CompileFlags:
   Add:
     - -xc++
-
 ---
 
 Diagnostics:
