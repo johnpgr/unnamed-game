@@ -4,8 +4,7 @@
 
 // ---- constants ----
 
-#define TEXT_CHUNK_MAX                                                         \
-    128 // max bytes per chunk (fits ~128 ASCII / ~42 CJK chars)
+#define TEXT_CHUNK_MAX 128 // max bytes per chunk
 #define TEXT_TREE_BASE 6
 #define TEXT_TREE_CAP (TEXT_TREE_BASE * 2) // max items per node/leaf
 #define TEXT_MAX_DEPTH 24 // max tree height (log_6(file_bytes) ceiling)
@@ -222,10 +221,7 @@ internal u16 text_partition_bytes_into_chunks(
             "text chunk partition overflowed fixed storage"
         );
         u16 chunk_size = text_chunk_size_for_bytes(bytes, remaining);
-        ASSERT(
-            chunk_size > 0,
-            "text chunk partition made no forward progress"
-        );
+        ASSERT(chunk_size > 0, "text chunk partition made no forward progress");
         chunk_sizes[chunk_count++] = chunk_size;
         bytes += chunk_size;
         remaining -= chunk_size;
@@ -312,8 +308,7 @@ internal void node_recompute_all(TextNode* node) {
 
 // ---- anchor API ----
 
-u32
-text_anchor_create(TextDocument* doc, u64 offset, TextAnchorBias bias) {
+u32 text_anchor_create(TextDocument* doc, u64 offset, TextAnchorBias bias) {
     for(u32 i = 0; i < TEXT_ANCHOR_MAX; ++i) {
         if(!doc->anchors[i].active) {
             doc->anchors[i] = {offset, bias, true};
@@ -382,8 +377,8 @@ internal void text_anchors_adjust_delete(
 }
 
 // ---- COW helpers ----
-// Clone a node/leaf if it's shared (ref_count > 1). Returns the writable copy.
 
+// Clone a node/leaf if it's shared (ref_count > 1). Returns the writable copy.
 internal TextNode* maybe_cow_node(TextDocument* doc, TextNode* node) {
     if(node->ref_count <= 1)
         return node;
@@ -395,12 +390,14 @@ internal TextNode* maybe_cow_node(TextDocument* doc, TextNode* node) {
 }
 
 internal TextLeaf* maybe_cow_leaf(TextDocument* doc, TextLeaf* leaf) {
-    if(leaf->ref_count <= 1)
-        return leaf;
+    if(leaf->ref_count <= 1) // If not shared
+        return leaf;         // Fast path: no need to clone
+
     TextLeaf* cow = text_alloc_leaf(doc);
     *cow = *leaf;
     cow->ref_count = 1;
     --leaf->ref_count;
+
     // Fix live-tree linked list so forward iteration stays correct
     if(cow->next)
         cow->next->prev = cow;
@@ -620,12 +617,7 @@ internal TextNodeSplit node_insert_small(
 
 // ---- public insert ----
 
-void text_insert(
-    TextDocument* doc,
-    u64 byte_offset,
-    u8 const* bytes,
-    u64 len
-) {
+void text_insert(TextDocument* doc, u64 byte_offset, u8 const* bytes, u64 len) {
     ASSERT(doc != nullptr, "doc must not be null");
     ASSERT(byte_offset <= doc->total.bytes, "insert offset out of range");
 
