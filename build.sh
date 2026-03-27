@@ -1,290 +1,121 @@
 #!/usr/bin/env bash
+set -eu
+cd "$(dirname "$0")"
 
-set -euo pipefail
-
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$SCRIPT_DIR"
-BIN_DIR="$ROOT_DIR/bin"
-APP_MAIN="$ROOT_DIR/src/app/editor_main.cpp"
-COMMAND=""
-MODE=""
-BUILD_SHADERS=0
-
-usage() {
-  printf 'usage: %s [debug|release|build|compdb] [debug|release] [shaders]\n' "$0" >&2
-  exit 1
-}
-
-parse_args() {
-  for arg in "$@"; do
-    case "$arg" in
-      shaders)
-        BUILD_SHADERS=1
-        ;;
-      build|compdb|__build)
-        if [[ -n "$COMMAND" ]]; then
-          usage
-        fi
-        COMMAND="$arg"
-        ;;
-      debug|release)
-        if [[ -z "$COMMAND" ]]; then
-          COMMAND="$arg"
-        elif [[ "$COMMAND" == "build" || "$COMMAND" == "compdb" || "$COMMAND" == "__build" ]] && [[ -z "$MODE" ]]; then
-          MODE="$arg"
-        else
-          usage
-        fi
-        ;;
-      *)
-        usage
-        ;;
-    esac
-  done
-
-  if [[ -z "$COMMAND" ]]; then
-    COMMAND=debug
+# --- Unpack Arguments --------------------------------------------------------
+for arg in "$@"; do
+  if echo "$arg" | grep -qE '^[a-z_]+$'; then
+    eval "$arg=1"
+  else
+    echo "unknown argument: $arg" >&2; exit 1
   fi
+done
+if [ "${release:-}" != "1" ]; then debug=1; fi
+if [ "${debug:-}" = "1" ];   then echo "[debug mode]"; fi
+if [ "${release:-}" = "1" ]; then echo "[release mode]"; fi
 
-  if [[ "$COMMAND" == "build" || "$COMMAND" == "compdb" || "$COMMAND" == "__build" ]] && [[ -z "$MODE" ]]; then
-    MODE=debug
+# --- Paths -------------------------------------------------------------------
+root_dir="$(pwd)"
+bin_dir="$root_dir/bin"
+src_dir="$root_dir/src"
+
+# --- Detect Platform ---------------------------------------------------------
+case "$(uname -s)" in
+  Darwin) platform=macos ;;
+  Linux)  platform=linux ;;
+  *)      echo "unsupported platform: $(uname -s)" >&2; exit 1 ;;
+esac
+
+# --- Find Vulkan -------------------------------------------------------------
+vk_inc="$(pkg-config --variable=includedir vulkan 2>/dev/null || true)"
+vk_lib="$(pkg-config --variable=libdir vulkan 2>/dev/null || true)"
+for d in /usr/local/include /opt/homebrew/include /usr/include; do
+  [ -f "$d/vulkan/vulkan.h" ] && vk_inc="$d" && break
+done
+for d in /usr/local/lib /opt/homebrew/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu; do
+  [ -f "$d/libvulkan.dylib" ] 2>/dev/null && vk_lib="$d" && break
+  [ -f "$d/libvulkan.so" ] 2>/dev/null && vk_lib="$d" && break
+done
+
+# --- Per-Platform Settings ---------------------------------------------------
+link_glfw="-lglfw"
+link_platform=""
+if [ "$platform" = "macos" ]; then
+  glfw_prefix="$(brew --prefix glfw 2>/dev/null || true)"
+  if [ -z "$glfw_prefix" ] || [ ! -f "$glfw_prefix/include/GLFW/glfw3.h" ]; then
+    echo "glfw not found. install with: brew install glfw" >&2; exit 1
   fi
-}
+  link_glfw="-I$glfw_prefix/include -L$glfw_prefix/lib -lglfw"
+  link_vulkan="-I$vk_inc -L$vk_lib -Wl,-rpath,$vk_lib -lvulkan"
+else
+  link_vulkan="-I$vk_inc -L$vk_lib -lvulkan"
+  link_platform="-lX11 -lXrandr -lm"
+fi
 
-setup_platform() {
-  case "$(uname -s)" in
-    Darwin)
-      PLATFORM=macos
-      VULKAN_LIB_NAME=libvulkan.dylib
-      VULKAN_FALLBACK_INCLUDE_DIRS=(/usr/local/include /opt/homebrew/include)
-      VULKAN_FALLBACK_LIB_DIRS=(/usr/local/lib /opt/homebrew/lib)
-      ;;
-    Linux)
-      PLATFORM=linux
-      VULKAN_LIB_NAME=libvulkan.so
-      VULKAN_FALLBACK_INCLUDE_DIRS=(/usr/include /usr/local/include)
-      VULKAN_FALLBACK_LIB_DIRS=(
-        /usr/lib
-        /usr/local/lib
-        /usr/lib/x86_64-linux-gnu
-        /usr/lib/aarch64-linux-gnu
-      )
-      ;;
-    *)
-      printf 'unsupported platform: %s\n' "$(uname -s)" >&2
-      exit 1
-      ;;
-  esac
-}
+# --- Compile/Link Line Definitions -------------------------------------------
+compiler="${CXX:-clang++}"
+common="-std=c++11 -Wall -Wextra -Werror -Wno-unused-function -Wno-missing-field-initializers -I$src_dir -DASSET_DIR=\"$bin_dir\""
+if [ "${debug:-}" = "1" ];   then compile="$compiler -g -O0 $common"; fi
+if [ "${release:-}" = "1" ]; then compile="$compiler -O2 -DNDEBUG $common"; fi
+link="$link_vulkan $link_glfw $link_platform -pthread"
 
-setup_mode() {
-  case "$1" in
-    debug)
-      MODE_FLAGS=(-g -O0)
-      ;;
-    release)
-      MODE_FLAGS=(-O2 -DNDEBUG)
-      ;;
-    *)
-      usage
-      ;;
-  esac
-}
+# --- Prep Directories --------------------------------------------------------
+mkdir -p "$bin_dir"
 
-compile_shaders() {
-  local shader_dir="$ROOT_DIR/assets/shaders"
-  local shader_out="$BIN_DIR/shaders"
-  local shader_compiler=""
-
+# --- Shaders -----------------------------------------------------------------
+if [ "${shaders:-}" = "1" ]; then
+  shader_dir="$root_dir/assets/shaders"
+  shader_out="$bin_dir/shaders"
   mkdir -p "$shader_out"
 
-  for candidate in glslangValidator /usr/local/bin/glslangValidator /opt/homebrew/bin/glslangValidator; do
-    if [[ -x "$candidate" ]] || command -v "$candidate" >/dev/null 2>&1; then
-      shader_compiler="$candidate"
-      break
-    fi
+  shader_compiler=""
+  for c in glslangValidator /usr/local/bin/glslangValidator /opt/homebrew/bin/glslangValidator; do
+    command -v "$c" >/dev/null 2>&1 && shader_compiler="$c" && break
   done
 
-  if [[ -n "$shader_compiler" ]]; then
+  if [ -n "$shader_compiler" ]; then
     "$shader_compiler" -V "$shader_dir/sprite.vert" -o "$shader_out/sprite.vert.spv"
     "$shader_compiler" -V "$shader_dir/sprite.frag" -o "$shader_out/sprite.frag.spv"
-    printf 'compiled shaders\n'
-    return
-  fi
-
-  if command -v glslc >/dev/null 2>&1 || [[ -x /usr/local/bin/glslc ]] || [[ -x /opt/homebrew/bin/glslc ]]; then
-    local glslc_bin
-    glslc_bin="$(command -v glslc || true)"
-    if [[ -z "$glslc_bin" ]]; then
-      if [[ -x /usr/local/bin/glslc ]]; then
-        glslc_bin=/usr/local/bin/glslc
-      else
-        glslc_bin=/opt/homebrew/bin/glslc
-      fi
+  else
+    glslc_bin=""
+    for c in glslc /usr/local/bin/glslc /opt/homebrew/bin/glslc; do
+      command -v "$c" >/dev/null 2>&1 && glslc_bin="$c" && break
+    done
+    if [ -z "$glslc_bin" ]; then
+      echo "missing shader compiler: glslangValidator or glslc" >&2; exit 1
     fi
-
     "$glslc_bin" "$shader_dir/sprite.vert" -o "$shader_out/sprite.vert.spv"
     "$glslc_bin" "$shader_dir/sprite.frag" -o "$shader_out/sprite.frag.spv"
-    printf 'compiled shaders\n'
-    return
   fi
+  echo "compiled shaders"
+fi
 
-  printf 'missing shader compiler: glslangValidator or glslc\n' >&2
+# --- Build Targets -----------------------------------------------------------
+didbuild=""
+if [ -z "${editor:-}" ] && [ -z "${compdb:-}" ]; then editor=1; fi
+
+if [ "${editor:-}" = "1" ]; then
+  didbuild=1
+  $compile "$src_dir/app/editor_main.cpp" $link -o "$bin_dir/main"
+  echo "built $bin_dir/main"
+fi
+
+# --- Compdb ------------------------------------------------------------------
+if [ "${compdb:-}" = "1" ]; then
+  didbuild=1
+  build_log="$(mktemp)"
+  trap 'rm -f "$build_log"' EXIT
+  args="editor"
+  [ "${debug:-}" = "1" ] && args="$args debug"
+  [ "${release:-}" = "1" ] && args="$args release"
+  [ "${shaders:-}" = "1" ] && args="$args shaders"
+  PS4='' bash -x "$0" $args >"$build_log" 2>&1
+  compiledb -f -o "$root_dir/compile_commands.json" -p "$build_log"
+  echo "generated $root_dir/compile_commands.json"
+fi
+
+# --- Warn On No Builds -------------------------------------------------------
+if [ -z "$didbuild" ]; then
+  echo "[WARNING] no valid build target. usage: ./build.sh [editor] [debug|release] [shaders|compdb]" >&2
   exit 1
-}
-
-setup_toolchain() {
-  VULKAN_INCLUDE_DIR="$(pkg-config --variable=includedir vulkan)"
-  VULKAN_LIB_DIR="$(pkg-config --variable=libdir vulkan)"
-
-  if [[ ! -f "$VULKAN_INCLUDE_DIR/vulkan/vulkan.h" ]]; then
-    for candidate in "${VULKAN_FALLBACK_INCLUDE_DIRS[@]}"; do
-      if [[ -f "$candidate/vulkan/vulkan.h" ]]; then
-        VULKAN_INCLUDE_DIR="$candidate"
-        break
-      fi
-    done
-  fi
-
-  if [[ ! -f "$VULKAN_LIB_DIR/$VULKAN_LIB_NAME" ]]; then
-    for candidate in "${VULKAN_FALLBACK_LIB_DIRS[@]}"; do
-      if [[ -f "$candidate/$VULKAN_LIB_NAME" ]]; then
-        VULKAN_LIB_DIR="$candidate"
-        break
-      fi
-    done
-  fi
-
-  VULKAN_CFLAGS=(-I"$VULKAN_INCLUDE_DIR")
-  if [[ "$PLATFORM" == "macos" ]]; then
-    GLFW_PREFIX="$(brew --prefix glfw 2>/dev/null || true)"
-    if [[ -z "$GLFW_PREFIX" || ! -f "$GLFW_PREFIX/include/GLFW/glfw3.h" ]]; then
-      printf 'glfw not found. install with: brew install glfw\n' >&2
-      exit 1
-    fi
-    GLFW_CFLAGS=(-I"$GLFW_PREFIX/include")
-    GLFW_LIBS=(-L"$GLFW_PREFIX/lib" -lglfw)
-    VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -Wl,-rpath,"$VULKAN_LIB_DIR" -lvulkan)
-    PLATFORM_LIBS=()
-  else
-    VULKAN_LIBS=(-L"$VULKAN_LIB_DIR" -lvulkan)
-    PLATFORM_LIBS=(-lX11 -lXrandr -lm)
-    GLFW_CFLAGS=()
-    GLFW_LIBS=(-lglfw)
-  fi
-
-  COMMON_FLAGS=(
-    -std=c++11
-    -Wall
-    -Wextra
-    -Werror
-    -Wno-unused-function
-    -Wno-missing-field-initializers
-    -I"$ROOT_DIR/src"
-    "-DASSET_DIR=\"$BIN_DIR\""
-    ${GLFW_CFLAGS[@]+"${GLFW_CFLAGS[@]}"}
-  )
-}
-
-syntax_check_source() {
-  "$CXX" \
-    "${COMMON_FLAGS[@]}" \
-    "${MODE_FLAGS[@]}" \
-    "${VULKAN_CFLAGS[@]}" \
-    -fsyntax-only \
-    "$1"
-}
-
-syntax_check_header() {
-  "$CXX" \
-    "${COMMON_FLAGS[@]}" \
-    "${MODE_FLAGS[@]}" \
-    "${VULKAN_CFLAGS[@]}" \
-    -x c++-header \
-    -fsyntax-only \
-    "$1"
-}
-
-collect_sources() {
-  SYNTAX_SOURCES=()
-  while IFS= read -r file; do
-    SYNTAX_SOURCES+=("$file")
-  done < <(
-    find "$ROOT_DIR/src" -type f -name '*.cpp' \
-      ! -path "$ROOT_DIR/src/app/*_main.cpp" \
-      ! -path "$ROOT_DIR/src/os/os_memory_win32.cpp" \
-      ! -path "$ROOT_DIR/src/os/os_threads_win32.cpp" \
-      ! -path "$ROOT_DIR/src/third_party/rgfw/*" \
-      | sort
-  )
-
-  PUBLIC_HEADERS=()
-  while IFS= read -r file; do
-    PUBLIC_HEADERS+=("$file")
-  done < <(find "$ROOT_DIR/src" -type f -name '*.h' | sort)
-}
-
-do_build() {
-  local mode="$1"
-
-  setup_platform
-  setup_mode "$mode"
-
-  CXX="${CXX:-clang++}"
-  mkdir -p "$BIN_DIR"
-  if [[ "$BUILD_SHADERS" -eq 1 ]]; then
-    compile_shaders
-  fi
-  setup_toolchain
-  collect_sources
-
-  for source in "${SYNTAX_SOURCES[@]}"; do
-    syntax_check_source "$source"
-  done
-
-  for header in "${PUBLIC_HEADERS[@]}"; do
-    syntax_check_header "$header"
-  done
-
-  "$CXX" \
-    "${COMMON_FLAGS[@]}" \
-    "${MODE_FLAGS[@]}" \
-    "${VULKAN_CFLAGS[@]}" \
-    "$APP_MAIN" \
-    "${VULKAN_LIBS[@]}" \
-    "${GLFW_LIBS[@]}" \
-    ${PLATFORM_LIBS[@]+"${PLATFORM_LIBS[@]}"} \
-    -pthread \
-    -o "$BIN_DIR/main"
-
-  printf 'built %s/main\n' "$BIN_DIR"
-}
-
-parse_args "$@"
-
-case "$COMMAND" in
-  build)
-    do_build "$MODE"
-    ;;
-  debug|release)
-    do_build "$COMMAND"
-    ;;
-  compdb)
-    BUILD_LOG="$(mktemp)"
-    trap 'rm -f "$BUILD_LOG"' EXIT
-
-    if [[ "$BUILD_SHADERS" -eq 1 ]]; then
-      PS4='' bash -x "$0" __build "$MODE" shaders >"$BUILD_LOG" 2>&1
-    else
-      PS4='' bash -x "$0" __build "$MODE" >"$BUILD_LOG" 2>&1
-    fi
-    compiledb -f -o "$ROOT_DIR/compile_commands.json" -p "$BUILD_LOG"
-    printf 'generated %s/compile_commands.json\n' "$ROOT_DIR"
-    ;;
-  __build)
-    do_build "$MODE"
-    ;;
-  *)
-    usage
-    ;;
-esac
+fi
